@@ -24,7 +24,7 @@ export default function GoogleHandoff({url,text,approved,saveDraft,onContinue,on
  return <div className="stack">
   <small>This button copies your review and opens Google. Tap the review box there and choose “Paste”, then add your saved photos. Google may ask you to sign in and choose your stars.</small>
   <button className="full" disabled={!approved||!text.trim()||busy} onClick={open}>{busy?<Loader2/>:<Copy/>}{busy?'Copying and opening Google…':'Paste my review to Google'}</button>
-  {!approved&&!!text.trim()&&<small>Choose “Edit my review”, then “Use this review” to approve your text first.</small>}
+  {!approved&&!!text.trim()&&<small>Choose “Edit my review”, then “Next” to approve your text first.</small>}
   {failed&&<div className="notice" role="status">Your browser couldn’t copy automatically. Your text is selected above: copy it with your phone’s menu, then choose “Continue to Google” below.</div>}
   <a className="text-link" href={url} target="_blank" rel="noopener noreferrer" onClick={()=>{saveDraft();void onContinue();}}>Continue to Google</a>
   <small>Open Google directly to sign in or write there. Use Back to return to your saved draft.</small>

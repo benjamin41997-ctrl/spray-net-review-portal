@@ -5,17 +5,18 @@ import {Checkbox} from '@/components/ui/checkbox';
 import {Toaster,toast} from 'sonner';
 import {api,orderedPlatforms,platformNames,saveFile} from '@/lib/client';
 import {adminLink,assetURL,photoURL as remotePhotoURL} from '@/lib/urls';
+import {publicGreeting} from '@/lib/greeting';
 import GoogleHandoff from './GoogleHandoff';
 import PhotoHandoff from './PhotoHandoff';
 
 type CustomerJob={id:string;title:string;source:string;demo:boolean;links:Record<string,string>;photos:{id:string;kind:string;label:string}[]};
-type Stage='welcome'|'choose'|'compose'|'check'|'photos'|'share';
-const stages:Stage[]=['welcome','choose','compose','check','photos','share'];
+type Stage='welcome'|'compose'|'check'|'photos'|'share';
+const stages:Stage[]=['welcome','compose','check','photos','share'];
 export default function Customer({token,initial:job,capabilities,preview,admin,jobPreview=false}:{token:string;initial:CustomerJob;capabilities:{transcription:boolean;cleanup:boolean};preview:boolean;admin:boolean;jobPreview?:boolean}){
  const [stage,setStage]=useState<Stage>('welcome');
- const [mode,setMode]=useState<'type'|'voice'>('type');const [help,setHelp]=useState(false);
+ const [mode,setMode]=useState<'type'|'voice'>('type');const [autoFormat,setAutoFormat]=useState(true);const [photoChoiceMade,setPhotoChoiceMade]=useState(false);
  const [text,setText]=useState('');const [original,setOriginal]=useState('');const [aiEdited,setAiEdited]=useState(false);
- const [selected,setSelected]=useState<string[]>([]);const [approved,setApproved]=useState(false);
+ const [selected,setSelected]=useState<string[]>(job.photos.map(p=>p.id));const [approved,setApproved]=useState(false);
  const [restored,setRestored]=useState(false);const [storageIssue,setStorageIssue]=useState(false);
  const [recording,setRecording]=useState(false);const [processing,setProcessing]=useState(false);
  const [seconds,setSeconds]=useState(0);const [audio,setAudio]=useState<Blob|null>(null);const [audioURL,setAudioURL]=useState('');
@@ -36,9 +37,9 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
   try{const v=JSON.parse(localStorage.getItem(key)||'null');if(v&&Date.now()-v.savedAt<30*86400000){
    const draft=typeof v.text==='string'?v.text.slice(0,8000):'';
    setText(draft);setOriginal(typeof v.original==='string'?v.original.slice(0,8000):'');setAiEdited(v.aiEdited===true);
-   setSelected((Array.isArray(v.selected)?v.selected:[]).filter((id:string)=>job.photos.some(p=>p.id===id)));
+   const explicitPhotos=v.photoChoiceMade===true||(Array.isArray(v.selected)&&v.selected.length>0);setPhotoChoiceMade(explicitPhotos);setSelected(explicitPhotos?v.selected.filter((id:string)=>job.photos.some(p=>p.id===id)):job.photos.map(p=>p.id));
    setApproved(v.approved===true&&!!draft.trim());setReported(Array.isArray(v.reported)?v.reported:[]);
-   setMode(v.mode==='voice'?'voice':'type');setHelp(v.help===true);
+   setMode(v.mode==='voice'?'voice':'type');setAutoFormat(v.autoFormat!==false);
    const saved:Stage=stages.includes(v.stage)?v.stage:draft?'compose':'welcome';
    setStage(saved==='photos'&&!v.approved?'check':saved);
   }else localStorage.removeItem(key);}catch{setStorageIssue(true);}setRestored(true);
@@ -47,10 +48,10 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
   if(context?.registerTool){Promise.resolve(context.registerTool({name:'stage_review_text',description:'Place customer-provided text in the editable draft. Does not approve, publish or improve it.',inputSchema:{type:'object',properties:{text:{type:'string',maxLength:8000}},required:['text'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:true},execute(input:any){if(typeof input.text!=='string'||input.text.length>8000)throw Error('Text must be at most 8000 characters.');update(input.text);setStage('compose');return {staged:true,approved:false,published:false};}},{signal:lifecycle.signal})).catch(()=>{});}
   return()=>{lifecycle.abort();if(recordingTimer.current)clearInterval(recordingTimer.current);if(limitTimer.current)clearTimeout(limitTimer.current);stream.current?.getTracks().forEach(t=>t.stop());};
  },[key]);
- function saveDraft(){if(!restored)return;try{localStorage.setItem(key,JSON.stringify({text,original,aiEdited,selected,approved,reported,stage,mode,help,savedAt:Date.now()}));}catch{setStorageIssue(true);}}
+ function saveDraft(){if(!restored)return;try{localStorage.setItem(key,JSON.stringify({text,original,aiEdited,selected,approved,reported,stage,mode,autoFormat,photoChoiceMade,savedAt:Date.now()}));}catch{setStorageIssue(true);}}
  // Persist before painting the next step: reload/navigation immediately after
  // an AI response must not restore the previous wording or approval state.
- useLayoutEffect(saveDraft,[text,original,aiEdited,selected,approved,reported,stage,mode,help,restored,key]);
+ useLayoutEffect(saveDraft,[text,original,aiEdited,selected,approved,reported,stage,mode,autoFormat,photoChoiceMade,restored,key]);
  useEffect(()=>{if(restored){heading.current?.focus({preventScroll:true});window.scrollTo({top:0,behavior:'instant'});}},[stage,restored]);
  useEffect(()=>{if(!audio){setAudioURL('');return;}const u=URL.createObjectURL(audio);setAudioURL(u);return()=>URL.revokeObjectURL(u);},[audio]);
  function stop(){if(recordingTimer.current)clearInterval(recordingTimer.current);if(limitTimer.current)clearTimeout(limitTimer.current);if(recorder.current?.state==='recording')recorder.current.stop();stream.current?.getTracks().forEach(t=>t.stop());setRecording(false);}
@@ -73,7 +74,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
    setAudio(null);setSeconds(0);setRecording(true);rec.start();recordingTimer.current=setInterval(()=>setSeconds(s=>s+1),1000);limitTimer.current=setTimeout(stop,120000);
   }catch(e){toast.error((e as Error).name==='NotAllowedError'?'Microphone access was declined. You can allow it in browser settings, or type below.':'The microphone could not start. Please type or try again.');stream.current?.getTracks().forEach(t=>t.stop());}finally{setProcessing(false);}
  }
- async function check(useAI=true){
+ async function check(useAI=autoFormat){
   if(!text.trim()||processing||recording)return;
   setEditingError('');setApproved(false);
   if(!useAI||!capabilities.cleanup){setStage('check');return;}
@@ -83,11 +84,11 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
    setText(b.text);setAiEdited(true);
   }catch(e){setEditingError((e as Error).message);setAiEdited(false);}finally{setProcessing(false);setStage('check');}
  }
- function back(){if(stage==='choose')setStage('welcome');else if(stage==='compose')setStage('choose');else if(stage==='check')setStage('compose');else if(stage==='photos')setStage('check');else if(stage==='share')setStage(approved&&job.photos.length?'photos':text?'check':'welcome');}
- function clear(){update('');setOriginal('');setAiEdited(false);setSelected([]);setReported([]);setAudio(null);setStage('welcome');toast('Draft cleared on this device.');}
+ function back(){if(stage==='compose')setStage('welcome');else if(stage==='check')setStage('compose');else if(stage==='photos')setStage('check');else if(stage==='share')setStage(approved&&job.photos.length?'photos':text?'check':'welcome');}
+ function clear(){update('');setOriginal('');setAiEdited(false);setSelected(job.photos.map(p=>p.id));setPhotoChoiceMade(false);setAutoFormat(true);setReported([]);setAudio(null);setStage('welcome');toast('Draft cleared on this device.');}
  const destinations=orderedPlatforms(job.source,job.links);
- const titles:Record<Stage,string>={welcome:job.title,choose:'How would you like to write it?',compose:mode==='voice'?'Speak your review':'Type your review',check:'Check your review',photos:'Add your project photos',share:'Ready to share'};
- const progress=stage==='choose'||stage==='compose'?0:stage==='check'?1:stage==='photos'?2:3;
+ const titles:Record<Stage,string>={welcome:publicGreeting(job.title),compose:mode==='voice'?'Speak your review':'Type your review',check:'Check your review',photos:'Add your project photos',share:'Ready to share'};
+ const progress=stage==='compose'?0:stage==='check'?1:stage==='photos'?2:3;
  const editor=<label>Your review<textarea aria-label="Your review" ref={textarea} disabled={!restored||recording||processing} maxLength={8000} value={text} onChange={e=>update(e.target.value)} placeholder="Write in your own words…"/></label>;
  return <main className="customer-shell guided">
   {admin&&<div className="actions"><a className="text-link" href={adminLink({assign:token})}>Manage this sticker</a></div>}
@@ -97,25 +98,19 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
   {stage!=='welcome'&&<><button className="quiet back-button" disabled={recording||processing} onClick={back}><ArrowLeft/>Back</button><ol className="review-progress" aria-label="Review steps">{['Write','Check','Photos','Share'].map((label,i)=><li key={label} aria-current={i===progress?'step':undefined} className={i===progress?'current':i<progress?'complete':''}><span>{i+1}</span>{label}</li>)}</ol></>}
   <div className="intro"><h1 ref={heading} tabIndex={-1}>{titles[stage]}</h1>{stage==='welcome'&&<p>A few simple steps to share your experience.</p>}</div>
   {stage==='welcome'&&<section className="panel stack entry-choices" aria-label="Get started">
-   <button className="full" disabled={!restored} onClick={()=>{setHelp(false);setStage('choose');}}><PenLine/>Write my review<ArrowRight/></button>
-   <button className="secondary full" disabled={!restored} onClick={()=>{setHelp(true);setStage('choose');}}><Sparkles/>Help me with my review<ArrowRight/></button>
-   <small>All honest feedback is welcome. You approve every word.</small>
-  </section>}
-  {stage==='choose'&&<section className="panel stack entry-choices">
-   {help&&<p>Tell us about your experience in your own words. We can help tidy spelling and grammar.</p>}
-   <button className="full" onClick={()=>{setMode('type');setStage('compose');}}><PenLine/>Type my review<ArrowRight/></button>
-   <button className="secondary full" onClick={()=>{setMode('voice');setStage('compose');}}><Mic/>Speak my review<ArrowRight/></button>
-   <small>Both options lead to the same spelling, grammar, and formatting check.</small>
+   <button className="full" disabled={!restored} onClick={()=>{setMode('type');setStage('compose');}}><PenLine/>Type my review<ArrowRight/></button>
+   <button className="secondary full" disabled={!restored} onClick={()=>{setMode('voice');setStage('compose');}}><Mic/>Speak my review<ArrowRight/></button>
+   <small>We’ll help tidy your wording. You approve every word.</small>
   </section>}
   {stage==='compose'&&<section className="panel stack">
-   {help&&<p>What would you like another homeowner to know about your experience? Include anything that matters to you.</p>}
+   <p>Tell us about your experience in your own words.</p>
    {mode==='voice'&&<><button className={recording?'full recording':'full'} disabled={processing||!restored} onClick={recording?stop:start}>{processing?<Loader2/>:recording?<Square/>:<Mic/>}{processing?'Please wait…':recording?`Stop recording · ${seconds}s`:'Start recording'}</button><small>{capabilities.transcription?'Tap to record, then stop when you’re finished. Up to two minutes. Audio is sent for transcription.':'Voice transcription isn’t connected yet. Use the microphone on your phone keyboard, or type below.'}</small></>}
    {editor}
    {mode==='type'&&<button className="quiet" onClick={()=>setMode('voice')}><Mic/>Speak instead</button>}
    {audioURL&&<details><summary>Your recording</summary><div className="stack"><audio controls src={audioURL} aria-label="Your recording"/><div className="actions"><button className="secondary" disabled={processing} onClick={()=>audio&&transcribe(audio)}>Retry transcription</button><button className="quiet" onClick={()=>audio&&saveFile(audio,'my-review-recording.'+(audio.type.includes('mp4')?'m4a':'webm'))}>Save recording</button></div></div></details>}
-   <button className="full" disabled={!text.trim()||processing||recording} onClick={()=>check()}>{processing?<Loader2/>:capabilities.cleanup?<Sparkles/>:<ArrowRight/>}{processing?'Checking your review…':capabilities.cleanup?'Check & format with AI':'Check my review'}</button>
-   <small>{capabilities.cleanup?'AI checks spelling, grammar, punctuation, and paragraph breaks. It should keep your meaning and details. You check the result next.':'AI spelling, grammar, and formatting will be available when connected. You can check and edit your words yourself now.'}</small>
-   {capabilities.cleanup&&<button className="quiet" disabled={!text.trim()||processing||recording} onClick={()=>check(false)}>Continue without AI</button>}
+   <label className="selection-label"><Checkbox checked={autoFormat} onCheckedChange={v=>setAutoFormat(v===true)} disabled={processing||recording}/>Automatically format my review</label>
+   <small>{capabilities.cleanup?'We’ll tidy spelling, grammar, and paragraph breaks when you tap Next. Uncheck to keep your wording unchanged.':'AI formatting isn’t connected yet. You can continue and check your wording yourself.'}</small>
+   <button className="full" disabled={!text.trim()||processing||recording} onClick={()=>check()}>{processing?<Loader2/>:<ArrowRight/>}{processing?'Formatting your review…':'Next'}</button>
   </section>}
   {stage==='check'&&<section className="panel stack">
    <p>{aiEdited?'AI checked the wording. Read it and change anything you like.':'Read your review and change anything you like.'}</p>
@@ -123,16 +118,16 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
    {editor}
    {original&&original!==text&&<><button className="secondary" onClick={()=>{update(original);setAiEdited(false);}}><RotateCcw/>Use my original wording</button><details className="original-review"><summary>See my original wording</summary><blockquote>{original}</blockquote></details></>}
    {capabilities.cleanup&&<button className="quiet" disabled={!text.trim()||processing} onClick={()=>check()}>{processing?<Loader2/>:<Sparkles/>}Check spelling & formatting again</button>}
-   <small>By continuing, you confirm this text reflects your own experience.</small>
-   <button className="full" disabled={!text.trim()||processing} onClick={()=>{setApproved(true);setStage(job.photos.length?'photos':'share');}}>Use this review<ArrowRight/></button>
+   <small>By tapping Next, you confirm this text reflects your own experience.</small>
+   <button className="full" disabled={!text.trim()||processing} onClick={()=>{setApproved(true);setStage(job.photos.length?'photos':'share');}}>Next<ArrowRight/></button>
   </section>}
   {stage==='photos'&&<>
-   <PhotoHandoff photos={job.photos} selected={selected} onSelect={setSelected} photoURL={id=>photoURL(id,true)}/>
-   <div className="stack"><button className="full" onClick={()=>setStage('share')}>Continue to sharing<ArrowRight/></button><small>Photos are optional. Save any you want to attach on the next page.</small></div>
+   <PhotoHandoff photos={job.photos} selected={selected} onSelect={ids=>{setSelected(ids);setPhotoChoiceMade(true);}} photoURL={id=>photoURL(id,true)} onContinue={()=>setStage('share')}/>
+   <button className="quiet full" onClick={()=>{setSelected([]);setPhotoChoiceMade(true);setStage('share');}}>Skip photos</button>
   </>}
   {stage==='share'&&<section className="panel stack" id="destinations">
    {text.trim()&&<div><details open={showReview} onToggle={e=>setShowReview(e.currentTarget.open)} className="original-review"><summary>See my review</summary><label>Your review<textarea aria-label="Your review" ref={textarea} readOnly value={text}/></label></details><button className="quiet" onClick={()=>{setApproved(false);setStage('check');}}>Edit my review</button></div>}
-   {selected.length>0&&<div className="notice photo-reminder">On Google, tap “Add photos” and look in Recents for the photos you saved. If they aren’t there, look in Files or Downloads when available.<button className="quiet" onClick={()=>setStage('photos')}>Save photos again</button></div>}
+   {selected.length>0&&<div className="notice photo-reminder">On Google, tap “Add photos” and look in Recents if you saved your photos. If they aren’t there, look in Files or Downloads when available.<button className="quiet" onClick={()=>setStage('photos')}>Save photos again</button></div>}
    {!destinations.length&&<div className="notice">Review links haven’t been added yet. Your draft stays here.</div>}
    {destinations.map((p,i)=><div className="destination" key={p}>
     <div className="destination-heading"><h2>{platformNames[p]}</h2>{i===0&&destinations.length>1&&<span className="badge">Start here</span>}</div>
