@@ -13,3 +13,6 @@
 [data-sonner-toast]{color:#003965!important}[data-sonner-toast][data-type=error]{color:#8b2115!important}
 [data-sonner-toast][data-mounted=true][data-visible=true]{opacity:1!important;transition:transform .2s!important}
 .topbar>button:last-child{margin-left:auto;font-size:.875rem}
+
+.photo-bundle{padding:1rem;border:1px solid var(--border);border-radius:9px;background:#f4f8fb}.combined-preview{width:100%;height:auto;border-radius:5px}.inline-loader{display:inline-block;width:20px;height:20px;margin-right:.5rem;vertical-align:middle}
+.photo-options summary,.photo-bundle summary{cursor:pointer;font-weight:800;min-height:44px;display:list-item;align-content:center}.photo-options[open] .actions,.photo-bundle[open] .stack{margin-top:1rem}

@@ -104,6 +104,18 @@ The [documented Business Profile review API](https://developers.google.com/my-bu
 
 The real supplied link was opened read-only in the available signed-in browser and displayed the Spray-Net South Charlotte review composer. No rating, text, photos, or review was submitted. The signed-out native flow was not exercised because this browser already has a Google session. Automated mobile tests intercept the external link and cover exact approved copying, denied clipboard, direct access, Back/draft recovery, default/override links, and accurate click-only metrics. They do not verify live Google sign-in or publication.
 
+## Customer photo handoff
+
+The supplied photo gallery now appears once, at the top of the customer page. No photos are preselected. **Select before & after** lets the customer explicitly select those project views with one tap; individual checkboxes remain available and selections survive returning from Google.
+
+Selected photos are fetched and prepared as JPEG files before the customer taps Save. The native `navigator.share({files})` call starts directly inside that tap, avoiding the lost user-activation problem caused by awaiting downloads first. File sharing is feature-detected. The customer chooses the save action in their phone's menu; the portal cannot force Camera Roll access, choose a share target, or verify that an image was saved. A completed share promise is never counted as a saved photo or published review.
+
+When exactly one Before and one After are selected, an optional labeled **before-and-after image** is also prepared, with both originals fully visible and no cropping. Its preview is shown before saving. This lets the customer download/save one JPEG and choose one file in Google's Add photos control. Separate JPEG originals remain available. All photo selection, saving, and uploading is customer-controlled.
+
+Native file sharing has a download fallback for the combined image and each original. Individual downloads avoid silently launching multiple downloads that a browser may block. Status says Download requested, not Saved. Customers look in Photos if they chose Save Image(s), or in Files/Downloads if they saved/downloaded files. Exact menu options and Google's available file-picker sources depend on the device and app, and still require physical iPhone/Android verification.
+
+Photo tests cover explicit selection, JPEG conversion, native sharing invoked during the tap, canceled/denied menus without automatic downloads, missing photos and retry, combined-image pixels containing both views, single-file downloads, and selection/draft recovery after returning from a mocked Google page. Browser emulation uses a mocked native share menu; no real Google photo upload is attempted.
+
 ## Review editing and daily use
 
 Prepare page, upload/reorder/label photos, add official platform links, preview, assign a sticker, and activate. Draft/unassigned codes show that the page is not ready. Archive disables access and can later be reversed for the same job. Delete removes customer data and permanently retires its codes.
@@ -126,7 +138,7 @@ node scripts/preview-static.mjs
 npm test
 ```
 
-The 38-check suite passes in Chromium Pixel 7 and WebKit iPhone 13 emulation. It covers static repository paths, permanent query links, job content updates with unchanged links, concurrent immutable assignments, archived/deleted access, authenticated images, cross-origin downloads, scanned-sticker creation, protected previews, draft restoration after external navigation, accurate metrics, QR PDFs, mobile layout and Axe checks. Auth tests require provider-verified confirmed allowlisted identity and reject forged tokens, anonymous users and production mock sign-in.
+The 46-check suite passes in Chromium Pixel 7 and WebKit iPhone 13 emulation. It covers static repository paths, permanent query links, job content updates with unchanged links, concurrent immutable assignments, archived/deleted access, authenticated images, cross-origin downloads, scanned-sticker creation, protected previews, draft restoration after external navigation, accurate metrics, QR PDFs, mobile layout and Axe checks. Auth tests require provider-verified confirmed allowlisted identity and reject forged tokens, anonymous users and production mock sign-in.
 
 Production tests serve only `dist/site` with no application server, bridge its requests to the local API using test interception, and verify that mock login cannot be enabled through public configuration. No live Supabase or OpenAI calls are made. Chromium recording uses synthetic audio/mocked processing; Windows WebKit lacks MediaRecorder, so its typing fallback is tested. Physical iOS/Android app flows, real email delivery, live transcription, and printer readability remain launch checks.
 
