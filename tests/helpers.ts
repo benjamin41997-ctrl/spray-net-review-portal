@@ -1,4 +1,4 @@
-import {request,type Page,type APIRequestContext} from '@playwright/test';
+import {request,expect,type Page,type APIRequestContext} from '@playwright/test';
 export const site='http://127.0.0.1:5173/spray-net-review-portal/';
 export const apiBase='http://127.0.0.1:8787';
 export const origin='http://127.0.0.1:5173';
@@ -14,4 +14,12 @@ export async function startDraft(page:Page,mode:'type'|'voice'='type'){
 export async function approveReview(page:Page){
  await page.getByRole('button',{name:'Next',exact:true}).click();
  await page.getByRole('button',{name:'Next',exact:true}).click();
+}
+
+export async function returnToCheck(page:Page){
+ for(let i=0;i<2;i++){
+  if(await page.getByRole('heading',{name:'Check your review',exact:true}).isVisible())return;
+  const previous=await page.locator('h1').textContent();await page.getByRole('button',{name:'Back',exact:true}).click();await expect(page.locator('h1')).not.toHaveText(previous!);
+ }
+ await expect(page.getByRole('heading',{name:'Check your review',exact:true})).toBeVisible();
 }

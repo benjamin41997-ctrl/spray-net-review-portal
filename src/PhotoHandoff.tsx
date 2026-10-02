@@ -10,7 +10,7 @@ type Photo={id:string;kind:string;label:string};
 type Prepared={key:string;files:Record<string,File>;failed:string[]};
 type Mode='choices'|'select'|'skip'|'downloaded';
 export const skipPhotoLabel="Don't share my photos, I don't want neighbors to be envious";
-export default function PhotoHandoff({photos,selected,onSelect,photoURL,onContinue}:{photos:Photo[];selected:string[];onSelect:(ids:string[])=>void;photoURL:(id:string)=>string;onContinue:()=>void}){
+export default function PhotoHandoff({photos,selected,onSelect,photoURL,onContinue,onDownload}:{photos:Photo[];selected:string[];onSelect:(ids:string[])=>void;photoURL:(id:string)=>string;onContinue:()=>void;onDownload:(ids:string[])=>void}){
  const [mode,setMode]=useState<Mode>(selected.length===0?'skip':'choices');
  const [prepared,setPrepared]=useState<Prepared|null>(null);const [error,setError]=useState('');const [status,setStatus]=useState('');const [retry,setRetry]=useState(0);const [requested,setRequested]=useState<string[]>([]);
  const key=JSON.stringify(photos.map(p=>[p.id,photoURL(p.id)]));const ready=prepared?.key===key?prepared:null;
@@ -31,6 +31,7 @@ export default function PhotoHandoff({photos,selected,onSelect,photoURL,onContin
   // All files are prepared before this tap. Request JPEG downloads directly;
   // do not open a share sheet, bundle into a ZIP, or claim they were saved.
   for(const id of ids)saveFile(ready!.files[id],ready!.files[id].name);
+  onDownload(ids);
   setRequested(ids);setStatus('Photo downloads requested. If your browser asks, allow multiple downloads. Look in Downloads or Files.');
   if(!personal){onSelect(ids);setMode('downloaded');}
  }

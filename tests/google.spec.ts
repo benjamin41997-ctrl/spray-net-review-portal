@@ -1,6 +1,6 @@
 import {test,expect,type APIRequestContext} from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import {login,site,fixture,patch,startDraft,approveReview} from './helpers';
+import {login,site,fixture,patch,startDraft,approveReview,returnToCheck} from './helpers';
 import {googleReviewURL} from '../lib/business';
 let admin:APIRequestContext;
 test.beforeAll(async()=>{({admin}=await login());});
@@ -35,8 +35,8 @@ test('guided flow copies exactly the approved review and restores the sharing sc
  await page.getByRole('button',{name:'Next',exact:true}).click();
  await page.getByRole('button',{name:'Go directly to review options',exact:true}).click();
  const button=page.getByRole('button',{name:'Paste my review to Google',exact:true});await expect(button).toBeDisabled();
- await page.getByRole('button',{name:'Edit my review',exact:true}).click();await page.getByRole('button',{name:'Next',exact:true}).click();await expect(button).toBeEnabled();
- await expect(page.getByText('Google may ask you to sign in',{exact:false})).toBeVisible();
+ await returnToCheck(page);await page.getByRole('button',{name:'Next',exact:true}).click();await expect(button).toBeEnabled();
+ await expect(page.getByText('Sign in to Google if prompted.',{exact:true})).toBeVisible();await expect(page.locator('.google-steps li')).toHaveCount(6);await expect(page.locator('.google-steps')).toHaveCSS('list-style-type','decimal');await expect(page.getByRole('button',{name:'Edit my review',exact:true})).toHaveCount(0);expect(await button.evaluate(el=>!!(el.compareDocumentPosition(document.querySelector('.share-extras')!)&Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
  expect((await new AxeBuilder({page}).analyze()).violations).toEqual([]);
  await page.screenshot({path:`.sites-runtime/qa/google-handoff-${test.info().project.name}.png`,fullPage:true});
  await button.click();await expect(page).toHaveURL(googleReviewURL);await page.goBack();
@@ -44,7 +44,7 @@ test('guided flow copies exactly the approved review and restores the sharing sc
  await expect(page.getByLabel('Your review',{exact:true})).toHaveValue(text);await expect(button).toBeEnabled();
  expect(await page.evaluate(()=>sessionStorage.getItem('qa-copied-text'))).toBe(text);
  await expect.poll(async()=>(await row(j.id)).clicks).toBe(1);expect((await row(j.id)).reported).toBe(0);
- await page.getByRole('button',{name:'Edit my review',exact:true}).click();await page.getByLabel('Your review',{exact:true}).fill(text+' Updated.');
+ await returnToCheck(page);await page.getByLabel('Your review',{exact:true}).fill(text+' Updated.');
  await page.getByRole('button',{name:'Go directly to review options',exact:true}).click();await expect(button).toBeDisabled();
  await admin.delete('/api/admin/jobs/'+j.id);
 });
