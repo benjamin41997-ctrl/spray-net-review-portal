@@ -25,3 +25,14 @@ test('AI receives only customer words and no response storage; independent flag 
   const result=await handle(request(),environment());expect(result.status).toBe(200);expect((await result.json() as any).text).toContain('arrival was late');expect(calls).toBe(1);
  }finally{globalThis.fetch=previous;}
 });
+
+test('transcription sends audio server-side, supports model configuration, and rejects missing or oversized speech',async()=>{
+ const previous=globalThis.fetch;let calls=0;let transcript:unknown='Arrival was late, but they let us know.';
+ function audioRequest(){const form=new FormData();form.set('audio',new File(['mock recorded speech'],'review.webm',{type:'audio/webm'}));return new Request(`https://api.example.test/api/customer/${qr}/transcribe`,{method:'POST',headers:{Origin:portal},body:form});}
+ try{
+  globalThis.fetch=(async(input:any,init:any)=>{calls++;expect(input).toBe('https://api.openai.com/v1/audio/transcriptions');expect(init.body.get('model')).toBe(calls===1?'gpt-transcribe':'gpt-4o-mini-transcribe');expect(await init.body.get('file').text()).toBe('mock recorded speech');return Response.json({text:transcript});}) as typeof fetch;
+  expect((await handle(audioRequest(),{...environment(),OPENAI_API_KEY:''})).status).toBe(503);expect(calls).toBe(0);
+  const valid=await handle(audioRequest(),environment());expect(valid.status).toBe(200);expect((await valid.json() as any).text).toBe(transcript);
+  for(const invalid of ['',null,'x'.repeat(8001)]){transcript=invalid;const response=await handle(audioRequest(),{...environment(),TRANSCRIPTION_MODEL:'gpt-4o-mini-transcribe'});expect(response.status).toBe(invalid===''||invalid===null?422:502);expect((await response.json() as any).text).toBeUndefined();}
+ }finally{globalThis.fetch=previous;}
+});

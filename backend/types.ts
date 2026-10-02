@@ -9,5 +9,7 @@ export interface Env {
  SUPABASE_URL?: string;
  SUPABASE_PUBLISHABLE_KEY?: string;
  OPENAI_API_KEY?: string;
+ TRANSCRIPTION_MODEL?: string;
+ REVIEW_EDITOR_MODEL?: string;
  ENABLE_AI_CLEANUP?: string;
 }
