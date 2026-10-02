@@ -8,6 +8,7 @@ import {adminLink,assetURL,photoURL as remotePhotoURL} from '@/lib/urls';
 import {publicGreeting} from '@/lib/greeting';
 import GoogleHandoff from './GoogleHandoff';
 import PhotoHandoff from './PhotoHandoff';
+import ReviewPreparation,{type PreparationPhase} from './ReviewPreparation';
 
 type CustomerJob={id:string;title:string;source:string;demo:boolean;links:Record<string,string>;photos:{id:string;kind:string;label:string}[]};
 type Stage='welcome'|'compose'|'check'|'photos'|'share';
@@ -18,7 +19,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
  const [text,setText]=useState('');const [original,setOriginal]=useState('');const [aiEdited,setAiEdited]=useState(false);
  const [selected,setSelected]=useState<string[]>(job.photos.map(p=>p.id));const [downloaded,setDownloaded]=useState<string[]>([]);const [approved,setApproved]=useState(false);
  const [restored,setRestored]=useState(false);const [storageIssue,setStorageIssue]=useState(false);
- const [recording,setRecording]=useState(false);const [processing,setProcessing]=useState(false);
+ const [recording,setRecording]=useState(false);const [preparation,setPreparation]=useState<PreparationPhase|null>(null);const processing=preparation!==null;
  const [seconds,setSeconds]=useState(0);const [audio,setAudio]=useState<Blob|null>(null);const [audioURL,setAudioURL]=useState('');
  const [reported,setReported]=useState<string[]>([]);const [editingError,setEditingError]=useState('');const [showReview,setShowReview]=useState(false);
  const recorder=useRef<MediaRecorder|null>(null);const stream=useRef<MediaStream|null>(null);
@@ -53,29 +54,29 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
  // Persist before painting the next step: reload/navigation immediately after
  // an AI response must not restore the previous wording or approval state.
  useLayoutEffect(saveDraft,[text,original,aiEdited,selected,downloaded,approved,reported,stage,mode,autoFormat,photoChoiceMade,restored,key]);
- useEffect(()=>{if(restored){heading.current?.focus({preventScroll:true});window.scrollTo({top:0,behavior:'instant'});}},[stage,restored]);
+ useEffect(()=>{if(restored){heading.current?.focus({preventScroll:true});window.scrollTo({top:0,behavior:'instant'});}},[stage,restored,processing]);
  useEffect(()=>{if(!audio){setAudioURL('');return;}const u=URL.createObjectURL(audio);setAudioURL(u);return()=>URL.revokeObjectURL(u);},[audio]);
- function stop(){if(recordingTimer.current)clearInterval(recordingTimer.current);if(limitTimer.current)clearTimeout(limitTimer.current);if(recorder.current?.state==='recording'){setProcessing(true);recorder.current.stop();}stream.current?.getTracks().forEach(t=>t.stop());setRecording(false);}
+ function stop(){if(recordingTimer.current)clearInterval(recordingTimer.current);if(limitTimer.current)clearTimeout(limitTimer.current);if(recorder.current?.state==='recording'){setPreparation('transcribing');recorder.current.stop();}stream.current?.getTracks().forEach(t=>t.stop());setRecording(false);}
  async function transcribe(blob:Blob){
-  setProcessing(true);
+  setPreparation('transcribing');
   try{const form=new FormData();const ext=blob.type.includes('mp4')?'m4a':blob.type.includes('ogg')?'ogg':'webm';form.set('audio',new File([blob],`review.${ext}`,{type:blob.type}));
    const b=await api(`${base}/transcribe`,{method:'POST',body:form});
    if(typeof b.text!=='string'||!b.text.trim())throw Error('No clear speech was detected. Please try again or type your review.');
    const draft=recordingBase.current?`${recordingBase.current}\n\n${b.text}`:b.text;if(draft.length>8000)throw Error('This transcript is too long. Save the recording below and shorten your draft before retrying.');
    setOriginal(draft);setAiEdited(false);update(draft);
    await prepareReview(draft,liveDraft.current.autoFormat);
-  }catch(e){toast.error((e as Error).message);}finally{setProcessing(false);}
+  }catch(e){toast.error((e as Error).message);}finally{setPreparation(null);}
  }
  async function start(){
   if(!capabilities.transcription){toast('Voice transcription isn’t connected yet. Use your keyboard’s microphone, or type your review.');textarea.current?.focus();return;}
   if(!navigator.mediaDevices?.getUserMedia||typeof MediaRecorder==='undefined'){toast.error('Recording is unavailable in this browser. Please type or use your keyboard’s microphone.');textarea.current?.focus();return;}
-  setProcessing(true);
+  setPreparation('microphone');
   try{const media=await navigator.mediaDevices.getUserMedia({audio:true});stream.current=media;
    const type=['audio/webm;codecs=opus','audio/mp4','audio/ogg;codecs=opus'].find(t=>MediaRecorder.isTypeSupported(t));const rec=new MediaRecorder(media,type?{mimeType:type}:undefined);recorder.current=rec;const chunks:BlobPart[]=[];
    rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};rec.onerror=()=>{stop();toast.error('Recording stopped. Please try again or type your review.');};
-   rec.onstop=()=>{const b=new Blob(chunks,{type:rec.mimeType.split(';')[0]});setAudio(b);if(b.size)void transcribe(b);else{setProcessing(false);toast.error('No audio was captured. Please try again or type your review.');}};
+   rec.onstop=()=>{const b=new Blob(chunks,{type:rec.mimeType.split(';')[0]});setAudio(b);if(b.size)void transcribe(b);else{setPreparation(null);toast.error('No audio was captured. Please try again or type your review.');}};
    recordingBase.current=liveDraft.current.text;setAudio(null);setSeconds(0);setRecording(true);rec.start();recordingTimer.current=setInterval(()=>setSeconds(s=>s+1),1000);limitTimer.current=setTimeout(stop,120000);
-  }catch(e){setRecording(false);toast.error((e as Error).name==='NotAllowedError'?'Microphone access was declined. You can allow it in browser settings, or type below.':'The microphone could not start. Please type or try again.');stream.current?.getTracks().forEach(t=>t.stop());}finally{setProcessing(false);}
+  }catch(e){setRecording(false);toast.error((e as Error).name==='NotAllowedError'?'Microphone access was declined. You can allow it in browser settings, or type below.':'The microphone could not start. Please type or try again.');stream.current?.getTracks().forEach(t=>t.stop());}finally{setPreparation(null);}
  }
  async function check(useAI=autoFormat){
   if(!text.trim()||processing||recording)return;
@@ -85,11 +86,11 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
  async function prepareReview(draft:string,useAI:boolean){
   setEditingError('');setApproved(false);
   if(!useAI||!capabilities.cleanup){setStage('check');return;}
-  setProcessing(true);
+  setPreparation('formatting');
   try{const b=await api(`${base}/cleanup`,{method:'POST',body:JSON.stringify({text:draft})});
    if(typeof b.text!=='string'||!b.text.trim()||b.text.length>8000)throw Error('The AI edit could not be used. Your original wording is unchanged.');
    setText(b.text);setAiEdited(true);
-  }catch(e){setEditingError((e as Error).message);setAiEdited(false);}finally{setProcessing(false);setStage('check');}
+  }catch(e){setEditingError((e as Error).message);setAiEdited(false);}finally{setPreparation(null);setStage('check');}
  }
  function back(){if(stage==='compose')setStage('welcome');else if(stage==='check')setStage('compose');else if(stage==='photos')setStage('check');else if(stage==='share')setStage(approved&&job.photos.length?'photos':text?'check':'welcome');}
  function clear(){update('');setOriginal('');setAiEdited(false);setSelected(job.photos.map(p=>p.id));setDownloaded([]);setPhotoChoiceMade(false);setAutoFormat(true);setReported([]);setAudio(null);setStage('welcome');toast('Draft cleared on this device.');}
@@ -105,13 +106,14 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
   {job.demo&&<div className="notice demo-notice">Sample project · please don’t submit sample feedback to a real listing.</div>}
   <header className="brand"><img src={assetURL('branding/logo.png')} alt="Spray-Net"/><p className="eyebrow">SOUTH CHARLOTTE</p></header>
   {stage!=='welcome'&&<><button className="quiet back-button" disabled={recording||processing} onClick={back}><ArrowLeft/>Back</button><ol className="review-progress" aria-label="Review steps">{['Write','Check','Photos','Share'].map((label,i)=><li key={label} aria-current={i===progress?'step':undefined} className={i===progress?'current':i<progress?'complete':''}><span>{i+1}</span>{label}</li>)}</ol></>}
-  <div className="intro"><h1 ref={heading} tabIndex={-1}>{titles[stage]}</h1>{stage==='welcome'&&<p>A few simple steps to share your experience.</p>}</div>
+  <div className="intro"><h1 ref={heading} tabIndex={-1}>{processing?(preparation==='microphone'?'Connecting your microphone…':'Preparing your review…'):titles[stage]}</h1>{stage==='welcome'&&<p>A few simple steps to share your experience.</p>}</div>
+  {preparation&&<ReviewPreparation phase={preparation}/>}
   {stage==='welcome'&&<section className="panel stack entry-choices" aria-label="Get started">
    <button className="full" disabled={!restored} onClick={()=>{setMode('type');setStage('compose');}}><PenLine/>Type my review<ArrowRight/></button>
    <button className="secondary full" disabled={!restored} onClick={()=>{setMode('voice');setStage('compose');}}><Mic/>Speak my review<ArrowRight/></button>
    <small>We’ll help tidy your wording. You approve every word.</small>
   </section>}
-  {stage==='compose'&&<section className="panel stack">
+  {stage==='compose'&&!processing&&<section className="panel stack">
    <p>Tell us about your experience in your own words.</p>
    {mode==='voice'&&<><button className={recording?'full recording':'full'} disabled={processing||!restored} onClick={recording?stop:start}>{processing?<Loader2/>:recording?<Square/>:<Mic/>}{processing?'Preparing your review…':recording?`Done recording · ${seconds}s`:'Start recording'}</button><small>{capabilities.transcription?'Tap Start, speak, then tap Done. We’ll prepare your text for you to check. Up to two minutes. Audio is sent for transcription.':'Voice transcription isn’t connected yet. Use the microphone on your phone keyboard, or type below.'}</small></>}
    {editor}
@@ -121,12 +123,11 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
    <small>{capabilities.cleanup?`We’ll improve spelling, grammar, sentence flow, and formatting ${mode==='voice'?'after recording or when you tap Next':'when you tap Next'}, keeping your meaning. Uncheck to keep your wording unchanged.`:'AI formatting isn’t connected yet. You can continue and check your wording yourself.'}</small>
    <button className="full" disabled={!text.trim()||processing||recording} onClick={()=>check()}>{processing?<Loader2/>:<ArrowRight/>}{processing?'Preparing your review…':'Next'}</button>
   </section>}
-  {stage==='check'&&<section className="panel stack">
+  {stage==='check'&&!processing&&<section className="panel stack">
    <p>{aiEdited?'AI tidied your wording. Please check that everything is accurate and change anything you like.':'Read your review and change anything you like.'}</p>
    {editingError&&<div className="notice error" role="alert">{editingError} Your words are still here.</div>}
    {editor}
    {original&&original!==text&&<><button className="secondary" disabled={processing} onClick={()=>{update(original);setAiEdited(false);}}><RotateCcw/>Use my original wording</button><details className="original-review"><summary>See my original wording</summary><blockquote>{original}</blockquote></details></>}
-   {processing&&<div role="status">Preparing your review…</div>}
    {capabilities.cleanup&&<button className="quiet" disabled={!text.trim()||processing} onClick={()=>check()}>{processing?<Loader2/>:<Sparkles/>}Check spelling & formatting again</button>}
    {recordingControls}
    {shortReview&&<div className="notice stack"><p>A short review is fine. Anything else about your experience you’d like to add?</p><button className="secondary" disabled={processing} onClick={()=>{setStage('compose');requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.setSelectionRange(text.length,text.length);});}}>Add more detail</button><small>Or tap Next to keep it short.</small></div>}
