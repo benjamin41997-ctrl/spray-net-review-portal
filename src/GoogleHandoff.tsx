@@ -25,10 +25,10 @@ export default function GoogleHandoff({url,text,approved,photoCount,includePhoto
   {approved&&!!text.trim()&&<ol className="google-steps" aria-label="How to post your Google review">
    <li>Press “Paste my review to Google” below.</li>
    <li>Sign in to Google if prompted.</li>
-   <li>Paste your review. The button automatically copies it for you.</li>
+   <li>Paste your review. It is automatically copied for you.</li>
    <li>{includePhotos?'Press “Add photos & videos”.':'You can post without photos.'}</li>
-   <li>{includePhotos?photoCount>0?`Select the ${photoCount} transformation picture${photoCount===1?'':'s'} you just downloaded.`:'Select any transformation pictures you’d like to include.':'Choose your star rating.'}</li>
-   <li>{includePhotos?'Confirm everything looks correct, choose your stars, and press “Post”.':'Confirm everything looks correct and press “Post”.'}</li>
+   <li>{includePhotos?`Import the ${photoCount} transformation photo${photoCount===1?'':'s'} you already downloaded.`:'Choose your rating.'}</li>
+   <li>{includePhotos?'Confirm everything looks correct, choose your rating, and press “Post”.':'Confirm everything looks correct and press “Post”.'}</li>
   </ol>}
   <button className="full" disabled={!approved||!text.trim()||busy} onClick={open}>{busy?<Loader2/>:<Copy/>}{busy?'Copying and opening Google…':'Paste my review to Google'}</button>
   {!approved&&!!text.trim()&&<small>Use Back to check your review, then tap Next to approve it.</small>}

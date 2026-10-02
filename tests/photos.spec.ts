@@ -30,7 +30,7 @@ test('exactly three photo choices; Share all initiates all JPEG downloads withou
  await page.getByRole('button',{name:'Share all photos',exact:true}).click();await expect.poll(()=>downloads.length).toBe(3);
  expect(downloads.map(d=>d.suggestedFilename()).sort()).toEqual(['Spray-Net-after-02.jpg','Spray-Net-before-01.jpg','Spray-Net-detail-03.jpg']);
  for(const d of downloads){const metadata=await sharp((await d.path())!).metadata();expect(metadata.format).toBe('jpeg');expect([metadata.width,metadata.height]).toEqual([400,300]);}
- await expect(page.getByRole('status')).toContainText('downloads requested');await expect(page.getByRole('heading',{name:'Add your project photos',exact:true})).toBeVisible();await page.getByRole('button',{name:'Next',exact:true}).click();await expect(page.getByRole('heading',{name:'Ready to share',exact:true})).toBeVisible();await expect(page.getByText('Select the 3 transformation pictures you just downloaded.',{exact:true})).toBeVisible();
+ await expect(page.getByRole('status')).toContainText('downloads requested');await expect(page.getByRole('heading',{name:'Add your project photos',exact:true})).toBeVisible();await page.getByRole('button',{name:'Next',exact:true}).click();await expect(page.getByRole('heading',{name:'Ready to share',exact:true})).toBeVisible();await expect(page.getByText('Import the 3 transformation photos you already downloaded.',{exact:true})).toBeVisible();
 });
 
 test('selection downloads only chosen photos and selections survive Google and a return to Photos',async({page})=>{
@@ -38,7 +38,7 @@ test('selection downloads only chosen photos and selections survive Google and a
  const downloads:Download[]=[];page.on('download',d=>downloads.push(d));await photos(page);await page.getByRole('button',{name:'Select which photos to include',exact:true}).click();
  await page.getByRole('checkbox',{name:'Select Optional detail'}).uncheck();await page.getByRole('checkbox',{name:'Select Before cabinets'}).uncheck();
  await page.getByRole('button',{name:'Download selected photos (1)',exact:true}).click();await expect.poll(()=>downloads.length).toBe(1);expect(downloads[0].suggestedFilename()).toBe('Spray-Net-after-02.jpg');
- await page.getByRole('button',{name:'Next',exact:true}).click();await expect(page.getByText('Select the 1 transformation picture you just downloaded.',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Paste my review to Google',exact:true}).click();await expect(page).toHaveURL(googleReviewURL);await page.goBack();await page.getByRole('button',{name:'Save photos again',exact:true}).click();await page.getByRole('button',{name:'Select which photos to include',exact:true}).click();
+ await page.getByRole('button',{name:'Next',exact:true}).click();await expect(page.getByText('Import the 1 transformation photo you already downloaded.',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Paste my review to Google',exact:true}).click();await expect(page).toHaveURL(googleReviewURL);await page.goBack();await page.getByRole('button',{name:'Save photos again',exact:true}).click();await page.getByRole('button',{name:'Select which photos to include',exact:true}).click();
  await expect(page.getByRole('checkbox',{name:'Select Before cabinets'})).not.toBeChecked();await expect(page.getByRole('checkbox',{name:'Select Finished cabinets'})).toBeChecked();await expect(page.getByRole('checkbox',{name:'Select Optional detail'})).not.toBeChecked();
 });
 
