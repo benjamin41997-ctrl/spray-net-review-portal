@@ -1,0 +1,1 @@
+export default function Home(){return <main className="entry"><img src="/branding/logo.png" alt="Spray-Net" width="230"/><p className="eyebrow">SOUTH CHARLOTTE</p><h1>Your home.<br/>Your experience.</h1><p>Scan the code on your project card to see your photos and share your experience.</p><a className="button secondary" href="/admin">Administrator sign in</a></main>}
