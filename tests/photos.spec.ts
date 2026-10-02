@@ -1,8 +1,9 @@
-import {test,expect,type APIRequestContext} from '@playwright/test';
+import {test,expect,type APIRequestContext,type Download} from '@playwright/test';
 import sharp from 'sharp';
 import AxeBuilder from '@axe-core/playwright';
 import {login,site,fixture,patch,startDraft,approveReview} from './helpers';
 import {googleReviewURL} from '../lib/business';
+import {skipPhotoLabel} from '../src/PhotoHandoff';
 let admin:APIRequestContext;let job:any;let code:string;
 test.beforeAll(async()=>{({admin}=await login());});
 test.afterAll(async()=>{await admin.dispose();});
@@ -16,77 +17,51 @@ test.beforeEach(async()=>{
  await admin.post('/api/admin/assign',{data:{job_id:job.id,token:code}});job=await(await patch(admin,job,'active')).json();
 });
 test.afterEach(async()=>{if(job?.id)await admin.delete('/api/admin/jobs/'+job.id);});
+async function photos(page:any){await page.goto(site+'?code='+code);await startDraft(page);await page.getByLabel('Your review',{exact:true}).fill('My own feedback.');await approveReview(page);}
 
-test('all supplied photos are selected by default and reach the native menu during the share tap',async({page})=>{
- await page.addInitScript(()=>{
-  Object.defineProperty(navigator,'canShare',{value:({files}:ShareData)=>!!files?.length&&files.every(f=>f.type==='image/jpeg')});
-  Object.defineProperty(navigator,'share',{value:(data:ShareData)=>{
-   const gesture=navigator.userActivation?.isActive??null;
-   sessionStorage.setItem('qa-photo-share',JSON.stringify({gesture,keys:Object.keys(data),files:data.files?.map(f=>({name:f.name,type:f.type,size:f.size}))}));return Promise.resolve();
-  }});
- });
- await page.goto(site+'?code='+code);await startDraft(page);await page.getByLabel('Your review',{exact:true}).fill('My feedback stays mine.');await approveReview(page);await expect(page.getByRole('checkbox',{name:'Select Before cabinets'})).toBeChecked();await expect(page.getByRole('checkbox',{name:'Select Finished cabinets'})).toBeChecked();
- await expect(page.getByRole('checkbox',{name:'Select Optional detail'})).toBeChecked();
- const save=page.getByRole('button',{name:'Share my photos (3)',exact:true});await expect(save).toBeEnabled();
- await save.click();const data=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('qa-photo-share')!));
- expect(data.files.map((f:any)=>f.name)).toEqual(['Spray-Net-before-01.jpg','Spray-Net-after-02.jpg','Spray-Net-detail-03.jpg']);expect(data.files.every((f:any)=>f.type==='image/jpeg'&&f.size>0)).toBeTruthy();expect(data.keys.sort()).toEqual(['files','title']);if(data.gesture!==null)expect(data.gesture).toBe(true);
- await expect(page.getByRole('heading',{name:'Ready to share',exact:true})).toBeVisible();await page.getByRole('button',{name:'Save photos again',exact:true}).click();expect((await new AxeBuilder({page}).analyze()).violations).toEqual([]);
- await page.screenshot({path:`.sites-runtime/qa/photo-save-${test.info().project.name}.png`,fullPage:true});
- await page.getByRole('checkbox',{name:'Select Before cabinets'}).uncheck();await expect(page.getByRole('button',{name:'Share my photos (2)',exact:true})).toBeEnabled();await expect(page.getByRole('heading',{name:'One photo, both views'})).toHaveCount(0);
+test('exactly three photo choices; Share all initiates all JPEG downloads without a share sheet',async({page})=>{
+ await page.addInitScript(()=>Object.defineProperty(navigator,'share',{value:()=>{throw Error('The share menu must not be used.');}}));
+ const downloads:Download[]=[];page.on('download',d=>downloads.push(d));await photos(page);
+ await expect(page.getByRole('button',{name:'Share all photos',exact:true})).toBeEnabled();
+ expect(await page.locator('.photo-choices button').allTextContents()).toEqual(['Share all photos','Select which photos to include',skipPhotoLabel]);
+ await expect(page.getByRole('checkbox',{name:/^Select /})).toHaveCount(0);expect(downloads).toHaveLength(0);
+ expect((await new AxeBuilder({page}).analyze()).violations).toEqual([]);
+ await page.screenshot({path:`.sites-runtime/qa/photo-choices-${test.info().project.name}.png`,fullPage:true});
+ await page.getByRole('button',{name:'Share all photos',exact:true}).click();await expect.poll(()=>downloads.length).toBe(3);
+ expect(downloads.map(d=>d.suggestedFilename()).sort()).toEqual(['Spray-Net-after-02.jpg','Spray-Net-before-01.jpg','Spray-Net-detail-03.jpg']);
+ for(const d of downloads){const metadata=await sharp((await d.path())!).metadata();expect(metadata.format).toBe('jpeg');expect([metadata.width,metadata.height]).toEqual([400,300]);}
+ await expect(page.getByRole('status')).toContainText('downloads requested');await expect(page.getByRole('heading',{name:'Add your project photos',exact:true})).toBeVisible();await page.getByRole('button',{name:'Next',exact:true}).click();await expect(page.getByRole('heading',{name:'Ready to share',exact:true})).toBeVisible();
 });
 
-test('single before-and-after download contains both labeled views and selections survive the Google trip',async({page})=>{
- await page.addInitScript(()=>{
-  Object.defineProperty(navigator,'canShare',{value:()=>false});
-  Object.defineProperty(navigator,'clipboard',{value:{writeText:async()=>{}}});
- });
- await page.route(googleReviewURL,r=>r.fulfill({body:'Mock Google review form. No photos or feedback are submitted.'}));
- await page.goto(site+'?code='+code);await startDraft(page);await page.getByLabel('Your review',{exact:true}).fill('My feedback stays mine.');await approveReview(page);await page.getByRole('checkbox',{name:'Select Optional detail'}).uncheck();
- await page.getByText('Save as one before-and-after photo',{exact:true}).click();
- const downloadPromise=page.waitForEvent('download');await page.getByRole('button',{name:'Download before-and-after photo',exact:true}).click();const download=await downloadPromise;
- expect(download.suggestedFilename()).toBe('Spray-Net-before-and-after.jpg');const path=await download.path();expect(path).toBeTruthy();const metadata=await sharp(path!).metadata();expect(metadata.format).toBe('jpeg');expect([metadata.width,metadata.height]).toEqual([1600,760]);
- const {data,info}=await sharp(path!).removeAlpha().raw().toBuffer({resolveWithObject:true});const pixel=(x:number,y:number)=>Array.from(data.subarray((y*info.width+x)*info.channels,(y*info.width+x)*info.channels+3));
- const before=pixel(400,380),after=pixel(1200,380);expect(before[0]).toBeGreaterThan(210);expect(before[2]).toBeLessThan(60);expect(after[2]).toBeGreaterThan(210);expect(after[0]).toBeLessThan(60);
- await expect(page.getByRole('status')).toContainText('Download requested.');await page.getByRole('button',{name:'Next',exact:true}).click();await page.getByRole('button',{name:'Paste my review to Google',exact:true}).click();await expect(page).toHaveURL(googleReviewURL);await page.goBack();await page.getByRole('button',{name:'Save photos again',exact:true}).click();
- await expect(page.getByRole('checkbox',{name:'Select Before cabinets'})).toBeChecked();await expect(page.getByRole('checkbox',{name:'Select Finished cabinets'})).toBeChecked();await expect(page.getByRole('checkbox',{name:'Select Optional detail'})).not.toBeChecked();
- if(await page.locator('details.photo-bundle').getAttribute('open')===null)await page.getByText('Save as one before-and-after photo',{exact:true}).click();
- await expect(page.getByRole('button',{name:'Download before-and-after photo',exact:true})).toBeEnabled();
- const single=page.waitForEvent('download');await page.getByRole('button',{name:'Download Before cabinets',exact:true}).click();expect((await single).suggestedFilename()).toBe('Spray-Net-before-01.jpg');
+test('selection downloads only chosen photos and selections survive Google and a return to Photos',async({page})=>{
+ await page.addInitScript(()=>Object.defineProperty(navigator,'clipboard',{value:{writeText:async()=>{}}}));await page.route(googleReviewURL,r=>r.fulfill({body:'Mock Google. No feedback or photos are submitted.'}));
+ const downloads:Download[]=[];page.on('download',d=>downloads.push(d));await photos(page);await page.getByRole('button',{name:'Select which photos to include',exact:true}).click();
+ await page.getByRole('checkbox',{name:'Select Optional detail'}).uncheck();await page.getByRole('checkbox',{name:'Select Before cabinets'}).uncheck();
+ await page.getByRole('button',{name:'Download selected photos (1)',exact:true}).click();await expect.poll(()=>downloads.length).toBe(1);expect(downloads[0].suggestedFilename()).toBe('Spray-Net-after-02.jpg');
+ await page.getByRole('button',{name:'Next',exact:true}).click();await page.getByRole('button',{name:'Paste my review to Google',exact:true}).click();await expect(page).toHaveURL(googleReviewURL);await page.goBack();await page.getByRole('button',{name:'Save photos again',exact:true}).click();await page.getByRole('button',{name:'Select which photos to include',exact:true}).click();
+ await expect(page.getByRole('checkbox',{name:'Select Before cabinets'})).not.toBeChecked();await expect(page.getByRole('checkbox',{name:'Select Finished cabinets'})).toBeChecked();await expect(page.getByRole('checkbox',{name:'Select Optional detail'})).not.toBeChecked();
 });
 
-test('canceled or denied photo menu keeps originals available and does not silently download',async({page})=>{
- await page.addInitScript(()=>{
-  Object.defineProperty(navigator,'canShare',{value:()=>true});
-  Object.defineProperty(navigator,'share',{configurable:true,value:()=>Promise.reject(new DOMException('Canceled','AbortError'))});
- });
- let downloads=0;page.on('download',()=>downloads++);await page.goto(site+'?code='+code);await startDraft(page);await page.getByLabel('Your review',{exact:true}).fill('My feedback stays mine.');await approveReview(page);await page.getByRole('checkbox',{name:'Select Optional detail'}).uncheck();
- await page.getByText('Save as one before-and-after photo',{exact:true}).click();
- await page.getByRole('button',{name:'Save before-and-after photo',exact:true}).click();await expect(page.getByRole('status')).toContainText('Photo menu canceled.');expect(downloads).toBe(0);
- await page.getByRole('checkbox',{name:'Select Finished cabinets'}).uncheck();await expect(page.getByRole('button',{name:'Share my photos (1)',exact:true})).toBeEnabled();
- await page.evaluate(()=>Object.defineProperty(navigator,'share',{value:()=>Promise.reject(new DOMException('Denied','NotAllowedError'))}));
- await page.getByRole('button',{name:'Share my photos (1)',exact:true}).click();await expect(page.getByRole('status')).toContainText('could not open');expect(downloads).toBe(0);await page.getByText('Download photos instead',{exact:true}).click();await expect(page.getByRole('button',{name:'Download Before cabinets',exact:true})).toBeEnabled();
+test('opt-out still offers downloads for personal use and keeps photo inclusion off after reload',async({page})=>{
+ const downloads:Download[]=[];page.on('download',d=>downloads.push(d));await photos(page);await page.getByRole('button',{name:skipPhotoLabel,exact:true}).click();
+ expect(downloads).toHaveLength(0);await expect(page.getByRole('button',{name:'Download photos for myself',exact:true})).toBeEnabled();
+ await page.getByRole('button',{name:'Download photos for myself',exact:true}).click();await expect.poll(()=>downloads.length).toBe(3);
+ const draft=await page.evaluate(code=>JSON.parse(localStorage.getItem('spraynet-review:v1:'+code)!),code);expect(draft.selected).toEqual([]);
+ await page.reload();await expect(page.getByRole('button',{name:'Download photos for myself',exact:true})).toBeEnabled();expect(downloads).toHaveLength(3);
+ await page.getByRole('button',{name:'Next',exact:true}).click();await expect(page.getByRole('heading',{name:'Ready to share',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Save photos again',exact:true})).toHaveCount(0);
 });
 
-test('unavailable photos show a retry; no fake saved or uploaded status',async({page})=>{
- await page.route('**/api/customer/*/photo/*?download=1',route=>route.fulfill({status:404,json:{error:'Unavailable'}}));
- await page.goto(site+'?code='+code);await startDraft(page);await page.getByLabel('Your review',{exact:true}).fill('My feedback stays mine.');await approveReview(page);await page.getByRole('checkbox',{name:'Select Optional detail'}).uncheck();
- await expect(page.getByRole('alert')).toContainText('selected photo is unavailable');await expect(page.getByRole('button',{name:'Retry photo preparation'})).toBeEnabled();await expect(page.getByRole('button',{name:/^(Save|Download) before-and-after photo$/})).toHaveCount(0);
- await page.unroute('**/api/customer/*/photo/*?download=1');await page.getByRole('button',{name:'Retry photo preparation'}).click();await expect(page.getByText('Save as one before-and-after photo',{exact:true})).toBeVisible();
+test('individual download fallback is available when a browser blocks batch downloads',async({page})=>{
+ await photos(page);await page.getByRole('button',{name:'Share all photos',exact:true}).click();await page.getByText('Download didn’t start?',{exact:true}).click();
+ await expect(page.getByText('Your browser may block several downloads at once.',{exact:false})).toBeVisible();
+ const d=page.waitForEvent('download');await page.getByRole('button',{name:'Download Before cabinets',exact:true}).click();expect((await d).suggestedFilename()).toBe('Spray-Net-before-01.jpg');
+ await expect(page.getByRole('status')).toContainText('downloads requested');
 });
 
-
-test('customers can deselect photos or skip them; choices persist and no sharing happens without a tap',async({page})=>{
- await page.addInitScript(()=>{
-  Object.defineProperty(navigator,'canShare',{value:()=>true});
-  Object.defineProperty(navigator,'share',{value:()=>{sessionStorage.setItem('qa-share-called','yes');return Promise.resolve();}});
- });
- await page.goto(site+'?code='+code);await startDraft(page);await page.getByLabel('Your review',{exact:true}).fill('My own feedback.');await approveReview(page);
- await expect(page.getByRole('button',{name:'Share my photos (3)',exact:true})).toBeEnabled();
- expect(await page.evaluate(()=>sessionStorage.getItem('qa-share-called'))).toBeNull();
- await page.getByRole('checkbox',{name:'Select Optional detail'}).uncheck();await page.reload();
- await expect(page.getByRole('checkbox',{name:'Select Optional detail'})).not.toBeChecked();await expect(page.getByRole('button',{name:'Share my photos (2)',exact:true})).toBeEnabled();
- await page.getByRole('button',{name:'Skip photos',exact:true}).click();await expect(page.getByRole('heading',{name:'Ready to share',exact:true})).toBeVisible();await page.reload();await page.getByRole('button',{name:'Back',exact:true}).click();
- for(const label of ['Before cabinets','Finished cabinets','Optional detail'])await expect(page.getByRole('checkbox',{name:'Select '+label})).not.toBeChecked();
- await expect(page.getByRole('button',{name:/Share my photos/})).toHaveCount(0);expect(await page.evaluate(()=>sessionStorage.getItem('qa-share-called'))).toBeNull();
- await page.getByRole('button',{name:'Select all photos',exact:true}).click();await expect(page.getByRole('button',{name:'Share my photos (3)',exact:true})).toBeEnabled();
+test('unavailable photos can be retried or excluded and do not prevent opting out',async({page})=>{
+ const before=job.photos.find((p:any)=>p.kind==='before').id;await page.route('**/api/customer/*/photo/'+before+'?download=1',r=>r.fulfill({status:404,json:{error:'Unavailable'}}));
+ await photos(page);await expect(page.getByRole('alert')).toContainText('Some photos could not be prepared');await expect(page.getByRole('button',{name:'Share all photos',exact:true})).toBeDisabled();
+ await page.getByRole('button',{name:'Select which photos to include',exact:true}).click();await page.getByRole('checkbox',{name:'Select Before cabinets'}).uncheck();await expect(page.getByRole('button',{name:'Download selected photos (2)',exact:true})).toBeEnabled();
+ await page.unroute('**/api/customer/*/photo/'+before+'?download=1');await page.getByRole('button',{name:'Retry photo preparation',exact:true}).click();await expect(page.getByRole('alert')).toHaveCount(0);
+ await page.getByRole('button',{name:'Back to photo options',exact:true}).click();await expect(page.getByRole('button',{name:'Share all photos',exact:true})).toBeEnabled();await page.getByRole('button',{name:skipPhotoLabel,exact:true}).click();await page.getByRole('button',{name:'Next',exact:true}).click();await expect(page.getByRole('heading',{name:'Ready to share',exact:true})).toBeVisible();
 });

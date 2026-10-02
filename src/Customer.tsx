@@ -123,7 +123,6 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
   </section>}
   {stage==='photos'&&<>
    <PhotoHandoff photos={job.photos} selected={selected} onSelect={ids=>{setSelected(ids);setPhotoChoiceMade(true);}} photoURL={id=>photoURL(id,true)} onContinue={()=>setStage('share')}/>
-   <button className="quiet full" onClick={()=>{setSelected([]);setPhotoChoiceMade(true);setStage('share');}}>Skip photos</button>
   </>}
   {stage==='share'&&<section className="panel stack" id="destinations">
    {text.trim()&&<div><details open={showReview} onToggle={e=>setShowReview(e.currentTarget.open)} className="original-review"><summary>See my review</summary><label>Your review<textarea aria-label="Your review" ref={textarea} readOnly value={text}/></label></details><button className="quiet" onClick={()=>{setApproved(false);setStage('check');}}>Edit my review</button></div>}
