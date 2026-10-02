@@ -27,6 +27,14 @@ test('AI receives only customer words and no response storage; independent flag 
  }finally{globalThis.fetch=previous;}
 });
 
+test('local Luna editing uses low reasoning and the same customer-only instructions',async()=>{
+ const previous=globalThis.fetch;
+ try{
+  globalThis.fetch=(async(_input:any,init:any)=>{const payload=JSON.parse(init.body);expect(payload.model).toBe('gpt-6-luna');expect(payload.reasoning).toEqual({effort:'low'});expect(payload.instructions).toBe(reviewEditingInstructions);expect(payload.store).toBe(false);expect(payload.input).toContain('training job');return Response.json({status:'completed',output:[{content:[{type:'output_text',text:payload.input}]}]});}) as typeof fetch;
+  const result=await handle(request(),{...environment(),REVIEW_EDITOR_MODEL:'gpt-6-luna'});expect(result.status).toBe(200);expect((await result.json() as any).text).toContain('arrival was late');
+ }finally{globalThis.fetch=previous;}
+});
+
 test('a configured legacy editor does not receive unsupported reasoning parameters',async()=>{
  const previous=globalThis.fetch;
  try{

@@ -61,8 +61,8 @@ export async function handle(r:Request,env:Env){const {db,bucket,requireAdmin,sa
     method:'POST',headers:{Authorization:`Bearer ${env.OPENAI_API_KEY}`,'Content-Type':'application/json'},
     body:JSON.stringify({
      model,
-     // Only send this parameter to Sol; legacy non-reasoning overrides reject it.
-     ...(model==='gpt-6.1-sol'?{reasoning:{effort:'low'}}:{}),
+     // Both selected GPT-6 editors support low effort; legacy models reject it.
+     ...(['gpt-6.1-sol','gpt-6-luna'].includes(model)?{reasoning:{effort:'low'}}:{}),
      instructions:reviewEditingInstructions,input:text,store:false,max_output_tokens:4000
     }),signal:AbortSignal.timeout(45000)
    });
