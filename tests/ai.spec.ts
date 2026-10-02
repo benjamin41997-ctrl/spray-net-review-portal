@@ -1,6 +1,7 @@
 import {test,expect} from '@playwright/test';
 import {handle} from '../backend/api';
 import type {Env} from '../backend/types';
+import {reviewEditingInstructions} from '../backend/review-editor';
 const qr='A'.repeat(32),portal='https://portal.example.test';
 function environment():Env{
  const db={prepare(sql:string){const statement={bind(..._values:unknown[]){return statement;},async first(){if(sql.startsWith('SELECT * FROM qr_codes'))return {job_id:'test-job'};if(sql.startsWith('SELECT * FROM jobs'))return {id:'test-job',title:'Test job',source:'training',status:'active',links:'{"google":"https://g.page/r/test/review"}'};return {count:1};},async all(){return {results:[]};}};return statement;}};
@@ -19,10 +20,18 @@ test('server refuses truncated, empty, or oversized edits so criticism cannot be
 test('AI receives only customer words and no response storage; independent flag and missing key prevent requests',async()=>{
  const previous=globalThis.fetch;let calls=0;
  try{
-  globalThis.fetch=(async(input:any,init:any)=>{calls++;expect(input).toBe('https://api.openai.com/v1/responses');const payload=JSON.parse(init.body);expect(payload.input).toBe('This was a training job. Finish looks good, but arrival was late.');expect(payload.store).toBe(false);return Response.json({status:'completed',output:[{content:[{type:'output_text',text:payload.input}]}]});}) as typeof fetch;
+  globalThis.fetch=(async(input:any,init:any)=>{calls++;expect(input).toBe('https://api.openai.com/v1/responses');const payload=JSON.parse(init.body);expect(payload.model).toBe('gpt-6.1-sol');expect(payload.reasoning).toEqual({effort:'low'});expect(payload.instructions).toBe(reviewEditingInstructions);expect(payload.input).toBe('This was a training job. Finish looks good, but arrival was late.');expect(payload.store).toBe(false);return Response.json({status:'completed',output:[{content:[{type:'output_text',text:payload.input}]}]});}) as typeof fetch;
   expect((await handle(request(),{...environment(),ENABLE_AI_CLEANUP:'false'})).status).toBe(403);
   expect((await handle(request(),{...environment(),OPENAI_API_KEY:''})).status).toBe(403);expect(calls).toBe(0);
   const result=await handle(request(),environment());expect(result.status).toBe(200);expect((await result.json() as any).text).toContain('arrival was late');expect(calls).toBe(1);
+ }finally{globalThis.fetch=previous;}
+});
+
+test('a configured legacy editor does not receive unsupported reasoning parameters',async()=>{
+ const previous=globalThis.fetch;
+ try{
+  globalThis.fetch=(async(_input:any,init:any)=>{const payload=JSON.parse(init.body);expect(payload.model).toBe('gpt-4.1-mini');expect(payload.reasoning).toBeUndefined();return Response.json({status:'completed',output:[{content:[{type:'output_text',text:payload.input}]}]});}) as typeof fetch;
+  expect((await handle(request(),{...environment(),REVIEW_EDITOR_MODEL:'gpt-4.1-mini'})).status).toBe(200);
  }finally{globalThis.fetch=previous;}
 });
 

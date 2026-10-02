@@ -9,7 +9,7 @@
   "ALLOWED_ORIGINS":"https://benjamin41997-ctrl.github.io",
   "ENABLE_AI_CLEANUP":"false",
   "TRANSCRIPTION_MODEL":"gpt-transcribe",
-  "REVIEW_EDITOR_MODEL":"gpt-4.1-mini"
+  "REVIEW_EDITOR_MODEL":"gpt-6.1-sol"
  },
  "d1_databases":[{"binding":"DB","database_name":"spray-net-reviews","database_id":"00000000-0000-4000-8000-000000000000","migrations_dir":"drizzle"}],
  "r2_buckets":[{"binding":"BUCKET","bucket_name":"spray-net-review-photos"}]
