@@ -1,6 +1,0 @@
-import { redirect } from 'next/navigation';
-import { resolveQR,publicJob,isAdmin,settings,HttpError } from '@/lib/portal';
-import Customer from './review';
-export const dynamic='force-dynamic';
-export default async function Page({params,searchParams}:{params:Promise<{token:string}>;searchParams:Promise<{preview?:string}>}){const {token}=await params;const query=await searchParams;return <Content token={token} preview={query.preview==='1'}/>;}
-async function Content({token,preview}:{token:string;preview:boolean}){const admin=await isAdmin();try{const {job}=await resolveQR(token,preview);return <Customer token={token} initial={publicJob(job)} capabilities={{transcription:settings().transcription,cleanup:settings().cleanup}} preview={preview&&admin} admin={admin}/>;}catch(e){if(admin&&e instanceof HttpError&&e.status===404&&!preview)redirect(`/admin?code=${encodeURIComponent(token)}`);return <main className="entry"><img src="/branding/logo.png" alt="Spray-Net" width="230"/><p className="eyebrow">SOUTH CHARLOTTE</p><h1>{e instanceof HttpError&&e.status===404?e.message:'Your page is temporarily unavailable.'}</h1><p>{e instanceof HttpError&&e.status===404?'Please contact your Spray-Net team if you need help with your project card.':'Please try again in a moment.'}</p></main>;}}

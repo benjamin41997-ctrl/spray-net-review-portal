@@ -1,47 +1,48 @@
 {
   "compilerOptions": {
-    "target": "ES2017",
+    "moduleResolution": "bundler",
+    "target": "ES2022",
     "lib": [
       "dom",
       "dom.iterable",
       "esnext"
     ],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "noEmit": true,
-    "esModuleInterop": true,
     "module": "esnext",
-    "moduleResolution": "bundler",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "jsx": "react-jsx",
-    "incremental": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
     "paths": {
       "@/*": [
         "./*"
       ]
     },
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "skipLibCheck": true,
+    "strict": true,
     "types": [
       "node",
+      "vite/client",
       "@cloudflare/workers-types"
     ]
   },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    "**/*.mts"
-  ],
   "exclude": [
     "node_modules",
-    "examples"
+    ".sites-runtime",
+    "examples",
+    "dist"
+  ],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "lib/**/*.ts",
+    "backend/**/*.ts",
+    "components/**/*.tsx",
+    "hooks/**/*.ts",
+    "db/schema.ts",
+    "vite.config.ts",
+    "drizzle.config.ts",
+    "tests/**/*.ts",
+    "playwright.config.ts"
   ]
 }

@@ -1,0 +1,14 @@
+{
+ "name":"spray-net-review-api",
+ "main":"backend/worker.ts",
+ "compatibility_date":"2026-05-15",
+ "compatibility_flags":["nodejs_compat"],
+ "vars":{
+  "ENVIRONMENT":"production",
+  "PUBLIC_PORTAL_URL":"https://benjamin41997-ctrl.github.io/spray-net-review-portal/",
+  "ALLOWED_ORIGINS":"https://benjamin41997-ctrl.github.io",
+  "ENABLE_AI_CLEANUP":"false"
+ },
+ "d1_databases":[{"binding":"DB","database_name":"spray-net-reviews","database_id":"00000000-0000-4000-8000-000000000000","migrations_dir":"drizzle"}],
+ "r2_buckets":[{"binding":"BUCKET","bucket_name":"spray-net-review-photos"}]
+}

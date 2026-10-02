@@ -1,68 +1,126 @@
 # Spray-Net South Charlotte review portal
 
-A working application for preparing customer pages and permanently assigning preprinted QR stickers. Customers need no account. Administrators use Sign in with ChatGPT and a server-side email allowlist.
+The customer portal and admin interface now build as a static **GitHub Pages** website. Protected APIs run separately. The previous Sites/Vinext login and hosting dependency have been removed. Customer/job information and private photos never go into the Pages artifact or public repository.
 
-## Preview
+## Permanent stickers and personalization
 
-Open http://127.0.0.1:5173/admin and choose **Sign in with ChatGPT**. Loopback development uses an explicitly labeled simulated account; production uses the three approved emails configured in ignored `.dev.vars`.
+The proposed permanent portal address is:
 
-The sample kitchen uses Spray-Net network photos copied from the existing portfolio assets. It is clearly identified as a sample, not a South Charlotte job. No real review destinations are configured. Test PDFs point to this computer's loopback address: do not distribute them to customers or use them to test another phone.
-
-Restart the installed preview from this directory:
-
-```powershell
-node scripts/run-framework.mjs dev --hostname 127.0.0.1
+```text
+https://benjamin41997-ctrl.github.io/spray-net-review-portal/
 ```
 
-## Daily workflow
+Every preprinted sticker contains that same page path plus its own random token:
 
-1. Generate 100 stickers. Set the permanent HTTPS domain before live printing. Select your batch and label dimensions, download the PDF, and print at Actual size / 100%.
-2. Scan an unused sticker while signed in, or enter its printed label under **Assign a sticker**.
-3. Choose an existing job or create one. Creating from a scanned sticker retains that sticker and asks you to assign it explicitly.
-4. Add an internal job name, a public title without identifying details, source, official review links, and labeled before/after photos. Preview the layout before assignment if desired.
-5. Assign and activate. Draft pages are unavailable to customers. Archive disables public page/photo access; reactivation restores the original link.
-6. Hand over the card or copy the personalized link for texting.
+```text
+https://benjamin41997-ctrl.github.io/spray-net-review-portal/?code=RANDOM_TOKEN
+```
 
-Assignments are permanent immediately, including draft jobs. Concurrent assignments cannot overwrite each other. Deleting a job retires its codes. Updates to its content never change the printed URL.
+The static application asks the secure backend which job belongs to that token and displays the matching photos/review options. You can generate 100 stickers, grab any unused one, assign it later, and keep updating the original job. Assignment is permanent; deleted jobs retire their codes. Tokens have 192 bits of randomness. This uses one reusable page and needs no GitHub redirects or rewrite rules.
 
-Customers can type or dictate, check/edit their text, approve it for copying, select supplied photos, and continue to external platforms. They choose their own rating and submit their own text/photos there. Nothing is automatically published or attached.
+The printed link points to GitHub Pages even if the backend moves. Update the public configuration and migrate the database/photos while preserving token assignments. Keep the GitHub account, repository name/path, and published page available. **No repository has been pushed or published yet; this is the prepared URL, not a live site.**
 
-## Hosting and GitHub
+## Working local preview
 
-Use GitHub for source/checks and a managed full-stack host for the app, database, and private photos. This build uses Sites Vinext with Cloudflare D1 and R2. GitHub Pages alone cannot run these protected APIs, storage controls, or server-side transcription.
+Open http://127.0.0.1:5173/spray-net-review-portal/?admin=1 and choose **Enter local admin preview**. This explicit simulated sign-in only works with the loopback development API. Production never accepts its token or exposes its sign-in endpoint.
 
-Sites-managed hosting is the simplest deployment path for this build because it supplies authentication dispatch and storage bindings. No hosted resources, subscriptions, remote repo, or public deployment have been created. Confirm hosting entitlement, custom-domain support, limits, backup arrangements, and any plan cost before launch. OpenAI usage is billed separately and can remain disconnected. Reusing Supabase would require adapting authentication/storage and maintaining an additional integration.
-
-**Do not expose this Worker directly on another public host with the current authentication helper.** Hosted authentication relies on Sites removing untrusted identity headers and injecting verified identity. Another host must replace this boundary with validated sessions. The simulated local identity is excluded from production builds.
-
-Keep the QR domain under your control. Hosting migrations must retain `/q/<token>`, the database including assignments, photo objects, and DNS. Printed URLs must use your permanent domain, not a provider preview address.
-
-## Fresh checkout
-
-Requires Node >=22.13.0. Install the committed lockfile:
+The sample kitchen is clearly labeled as Spray-Net network imagery, not a South Charlotte job. No real review links or transcription credentials are connected. Sample data from the earlier prototype has been retained locally.
 
 ```powershell
-npm run install:ci
+# Installed checkout:
+node scripts/dev.mjs
+```
+
+For a fresh checkout, use Node >=22.13.0:
+
+```powershell
+npm ci --no-audit --no-fund
 Copy-Item .env.example .dev.vars
-npm run build
-node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_high_rictor.sql
-npm run dev -- --hostname 127.0.0.1
+npm run db:local
+npm run dev
 ```
 
-Apply each migration once per database. The current local preview is already migrated. Production migration is separate. Do not commit `.dev.vars`, customer data, database state, token sheets, or credentials; these are ignored.
+The local database is already migrated. Apply the SQL only once on a new database. The dev script starts a static Vite frontend on 5173 and a separate local Worker on 8787, creates a random local-only admin token when needed, and stores runtime state in ignored directories. Ctrl+C stops the preview. The three supplied admin emails remain in the ignored `.dev.vars` file.
 
-| Runtime value | Purpose |
+## Architecture and authentication
+
+| Part | Implementation |
 | --- | --- |
-| `ADMIN_EMAILS` | Comma-separated administrator emails; the three supplied addresses are configured locally. |
-| `PUBLIC_ORIGIN` | Permanent HTTPS domain origin without a path; required for live printing. |
-| `OPENAI_API_KEY` | Server-only secret; leave empty to use typing/direct links without transcription. |
-| `ENABLE_AI_CLEANUP` | Independent switch, default `false`; also requires the API key. |
+| Public pages and admin UI | React/Vite static build, uploaded to GitHub Pages from `dist/site`. |
+| Protected API | Standalone Cloudflare Worker, `backend/worker.ts`. It can now be hosted independently of Sites. |
+| Project/QR/activity records | Private Cloudflare D1 database, with the existing SQL schema and permanent assignment protections. |
+| Project photos | Private R2 bucket; the API checks access before serving each image. |
+| Administrator sign-in | Supabase email magic links. The Worker verifies the access token with Supabase's Auth server and checks a confirmed, non-anonymous email against its own allowlist. |
+| Customer drafts | Browser-local storage for up to 30 days, with no customer registration. |
 
-Set hosted values through secret/configuration controls. Never paste keys into GitHub or customer fields. Sites key provisioning uses the OpenAI Developers plugin when available.
+The workspace already contains a Supabase project used by the networking app. Its authentication can be reused after reviewing that project's settings. This build has not modified it, created accounts, sent invitations, or sent sign-in emails. Supabase handles identity only; review data/photos stay in D1/R2. The split retains the tested database/storage implementation but means maintaining Supabase and Cloudflare configuration as well as GitHub Pages.
 
-Transcription uses `gpt-4o-mini-transcribe`. Optional editing uses the Responses API with `gpt-4.1-mini`. Recordings stop at two minutes. Daily quotas: five transcription and five editing attempts per QR; 100 globally for each operation. Set an API account spending limit when connecting it. Audio is not stored in D1/R2. Failed recordings remain in the browser until the page closes and can be saved or retried.
+Client-supplied identity headers are never trusted. Neither the static site nor a hidden admin button can authorize writes. The backend validates every protected request, accepts CORS only from configured origins, and rejects mutations from other origins. Frontend images fetch through authenticated requests when necessary; access tokens are never put in image URLs. Production does not depend on ChatGPT/Sites sign-in.
 
-Editing instructions preserve facts, sentiment, criticism, uncertainty, and training context, correct grammar/spelling only, and prohibit added praise/details or unnecessary length. Customers may reject suggestions or restore the transcript. Models can make mistakes. Approval does not establish platform permission: keep cleanup disabled until business-provided AI editing is confirmed for your chosen destinations. This research did not establish blanket permission.
+## Public Pages configuration
+
+`public/portal-config.json` contains only public connection settings. Its checked-in backend/auth fields are intentionally blank until launch. Development serves local values without changing this file.
+
+| Field | Value |
+| --- | --- |
+| `apiBaseURL` | HTTPS origin of the deployed Worker, without `/api`. |
+| `portalURL` | Full permanent GitHub Pages URL including the repository path and trailing slash. |
+| `supabaseURL` | Chosen Supabase project's public HTTPS URL. |
+| `supabasePublishableKey` | Public publishable key or legacy anon key only. Never a secret/service-role key. |
+| `localPreview` | Always `false` in a production artifact; a client setting cannot enable production mock authentication. |
+
+The configuration script rejects credentials in URLs and private Supabase keys. **OpenAI keys, SMTP passwords, admin access tokens, and service-role keys never belong here or in repository variables used to build the website.** Backend secrets are separate from public Pages settings.
+
+## Prepare deployment; publish after review
+
+1. Create the intended GitHub repository and push the reviewed source. Select **GitHub Actions** as its Pages publishing source. Confirm the permanent URL before live printing.
+2. In Cloudflare, prepare the D1 database and private R2 bucket. Replace the placeholder database ID in `wrangler.jsonc`. `wrangler.local.jsonc` uses only local preview storage. No cloud resources have been provisioned by this build.
+3. Configure Worker secrets: `ADMIN_EMAILS` with the three approved addresses, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and optionally `OPENAI_API_KEY`. Keep `ENVIRONMENT=production` and `ENABLE_AI_CLEANUP=false`. Set `PUBLIC_PORTAL_URL` to the full GitHub URL and `ALLOWED_ORIGINS` to its origin, e.g. `https://benjamin41997-ctrl.github.io`. Do not upload `LOCAL_ADMIN_TOKEN`.
+4. Apply `drizzle/0000_high_rictor.sql` to the production database once, then deploy the Worker. Local preview state is not automatically copied to production. Start production sticker batches in that production database.
+5. In Supabase, prepare existing confirmed admin accounts for the three approved emails and allow the exact callback URL `https://benjamin41997-ctrl.github.io/spray-net-review-portal/?admin=1`. The UI uses `shouldCreateUser:false`, so login does not create accounts. Check [passwordless setup](https://supabase.com/docs/guides/auth/auth-email-passwordless) and [email delivery requirements](https://supabase.com/docs/guides/auth/auth-smtp); configure reliable delivery for all approved recipients before launch. Do not change another application's Site URL or email template without reviewing its impact.
+6. Set GitHub repository variables `REVIEW_API_BASE_URL`, `REVIEW_SUPABASE_URL`, and `REVIEW_SUPABASE_PUBLISHABLE_KEY`. These values are public. The manual Pages workflow computes the portal URL/repository base path and refuses to publish if the connection settings are missing.
+7. Run **Publish review portal to GitHub Pages** manually after approval. Only `dist/site` is uploaded; the Worker, database files, credentials, customer records, and local test sheets are excluded.
+8. Test the actual hosted email sign-in, job creation/assignment, photo saving, native platform links, and optional transcription. Print and scan one live sticker at 100% scale on the intended stock before distributing a batch.
+
+`npm run backend:build` is a **dry run** that produces `dist/api` without deploying. No automated backend deployment or paid-service provisioning is included. The static build and Worker bundle are both prepared and checked locally.
+
+## Costs and maintenance
+
+No paid plan or new service has been purchased. GitHub Pages hosting depends on repository visibility and your GitHub plan. Existing public Pages projects can use the current workflow. [GitHub documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages) describes availability.
+
+As checked October 2, 2026, [Workers Free](https://developers.cloudflare.com/workers/platform/pricing/) includes 100,000 requests/day and a 10 ms CPU limit per invocation; D1 has free allowances. Workers Paid starts at $5/month. Free-plan suitability still needs testing on the deployed workload, especially bulk operations. [R2 Standard](https://developers.cloudflare.com/r2/pricing/) includes 10 GB-month of storage plus operation allowances; excess usage is metered. Confirm billing activation and account settings before provisioning.
+
+[Supabase](https://supabase.com/pricing) has a free plan; reusing the existing project's authentication avoids adding another database project, but its current plan, shared quotas, availability, and email provider still need review. Email delivery and OpenAI usage can add separate costs. No plan change is implied or authorized by this implementation.
+
+## Review editing and daily use
+
+Prepare page, upload/reorder/label photos, add official platform links, preview, assign a sticker, and activate. Draft/unassigned codes show that the page is not ready. Archive disables access and can later be reversed for the same job. Delete removes customer data and permanently retires its codes.
+
+Customers see supplied before/after photos, type or dictate honest feedback, edit/check it, select photos themselves, copy approved text, save images, and continue to the originating platform. Direct/training customers start with Google; Angi/Thumbtack jobs prioritize their native link. Publication and ratings occur on the external platform.
+
+Transcription uses `gpt-4o-mini-transcribe` when a server key is connected. Optional cleanup uses `gpt-4.1-mini` and is independently disabled by default. Instructions preserve facts, criticism, sentiment, uncertainty and training disclosures and forbid invented praise, keywords, or needless expansion. Customers can reject edits or restore the transcript. Customer approval does not establish platform permission; keep AI cleanup off until verified for the intended destinations.
+
+Recordings stop at two minutes. Daily limits are five transcription and five cleanup requests per QR, with 100 global requests per operation. Audio is not stored in D1/R2. Failed recordings remain in the browser until the page closes and may be saved or retried. API spending limits should be configured when connecting paid transcription.
+
+## Verification
+
+```powershell
+npm run typecheck
+npm run build
+npm run backend:build
+# While the frontend/API preview is running:
+node scripts/preview-static.mjs
+# In another terminal, with browsers installed:
+npm test
+```
+
+The 30-check suite passes in Chromium Pixel 7 and WebKit iPhone 13 emulation. It covers static repository paths, permanent query links, job content updates with unchanged links, concurrent immutable assignments, archived/deleted access, authenticated images, cross-origin downloads, scanned-sticker creation, protected previews, draft restoration after external navigation, accurate metrics, QR PDFs, mobile layout and Axe checks. Auth tests require provider-verified confirmed allowlisted identity and reject forged tokens, anonymous users and production mock sign-in.
+
+Production tests serve only `dist/site` with no application server, bridge its requests to the local API using test interception, and verify that mock login cannot be enabled through public configuration. No live Supabase or OpenAI calls are made. Chromium recording uses synthetic audio/mocked processing; Windows WebKit lacks MediaRecorder, so its typing fallback is tested. Physical iOS/Android app flows, real email delivery, live transcription, and printer readability remain launch checks.
+
+Both local and GitHub-address TEST PDFs are generated. The GitHub-address version is a layout/URL-format sample tied to preview tokens, **not a production sticker batch**. Render it at 300 DPI and run `node scripts/check-qr.mjs .sites-runtime/qa github-qr-render` to check all 100 query-token codes. Actual customer sheets must be generated from the activated production backend.
+
+GitHub checks build both artifacts and run the local/browser suite. The deployment workflow is manual. The previous prototype remains recoverable in Git history and ignored local backup files.
 
 ## Platform findings, checked October 2, 2026
 
@@ -87,23 +145,3 @@ Admin uploads are resized/re-encoded as JPEG to remove metadata and stored in pr
 Drafts, approval, photo selections, and confirmations persist in the same browser for up to 30 days. Another device/browser or cleared/private storage can lose the draft. **Clear my draft** removes the editable draft. Admin deletion cannot remotely remove device-local data.
 
 Metrics distinguish visits (once per browser session), link clicks, and device-deduplicated customer-reported completions. None establish publication or unique customers. Direct platform activity is invisible here. Admin previews do not record events. Review text, recordings, IP addresses, and ratings are not saved in the activity table.
-
-## Validation
-
-```powershell
-npm run typecheck
-npm run build
-# With the migrated dev server running:
-node node_modules/@playwright/test/cli.js install chromium webkit
-npm test
-```
-
-Browser/API tests cover authentication/header spoofing/CSRF, concurrent permanent assignment, job lifecycle and photo access, malformed uploads/links, edit conflicts, mobile photo resizing, retained drafts, platform order, accurate activity, protected preassignment preview, scanned-sticker creation, PDF export, responsive layouts, and Axe accessibility checks.
-
-Chromium Pixel 7 and WebKit iPhone 13 emulation are used. Chromium recording uses synthetic audio and mocked transcription/editing responses. Permission denial and edit rejection are tested. Windows Playwright WebKit lacks MediaRecorder; its unavailable-recording typing fallback is tested. This is not physical-device testing or live transcription validation.
-
-A 100-code test PDF was rendered at 300 DPI and all 100 unique links decoded. `scripts/check-qr.mjs` checks Poppler-generated `.sites-runtime/qa/qr-render-N.png`. Physical printing/scanning has not been performed. Print at 100%, measure stock alignment, and scan a live sample on both phones before distributing a batch.
-
-Launch still requires: permanent domain and hosting plan, production secrets/allowlist and migration, genuine account links, actual iPhone/Android sign-in and photo-saving checks, live transcription if enabled, and Apple listing eligibility. Production authentication is implemented but only simulated local auth was exercised. Feature-detected WebMCP draft/editor tools do not approve or publish; real WebMCP browser support was not exercised.
-
-GitHub build/typecheck checks are included. No remote repository was pushed and nothing was publicly deployed.

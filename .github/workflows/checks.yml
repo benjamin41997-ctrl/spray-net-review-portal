@@ -11,6 +11,18 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - run: npm run install:ci
+      - run: npm ci --no-audit --no-fund
       - run: npm run typecheck
       - run: npm run build
+      - run: npm run backend:build
+      - run: npm run db:local
+      - run: node node_modules/@playwright/test/cli.js install --with-deps chromium webkit
+      - name: Run local frontend, API and static production preview
+        run: |
+          npm run dev > .test-server.log 2>&1 &
+          node scripts/preview-static.mjs > .test-static.log 2>&1 &
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:5173/spray-net-review-portal/ > /dev/null && curl --silent http://127.0.0.1:8787/ > /dev/null && curl --fail --silent http://127.0.0.1:4173/spray-net-review-portal/ > /dev/null; then break; fi
+            sleep 1
+          done
+          npm test
