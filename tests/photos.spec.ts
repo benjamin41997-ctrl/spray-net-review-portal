@@ -1,7 +1,7 @@
 import {test,expect,type APIRequestContext} from '@playwright/test';
 import sharp from 'sharp';
 import AxeBuilder from '@axe-core/playwright';
-import {login,site,fixture,patch} from './helpers';
+import {login,site,fixture,patch,startDraft,approveReview} from './helpers';
 import {googleReviewURL} from '../lib/business';
 let admin:APIRequestContext;let job:any;let code:string;
 test.beforeAll(async()=>{({admin}=await login());});
@@ -25,7 +25,7 @@ test('customer chooses the pair and both JPEG files reach the native menu during
    sessionStorage.setItem('qa-photo-share',JSON.stringify({gesture,keys:Object.keys(data),files:data.files?.map(f=>({name:f.name,type:f.type,size:f.size}))}));return Promise.resolve();
   }});
  });
- await page.goto(site+'?code='+code);await expect(page.getByRole('checkbox',{name:'Select Before cabinets'})).not.toBeChecked();await expect(page.getByRole('checkbox',{name:'Select Finished cabinets'})).not.toBeChecked();
+ await page.goto(site+'?code='+code);await startDraft(page);await page.getByLabel('Your review',{exact:true}).fill('My feedback stays mine.');await approveReview(page);await expect(page.getByRole('checkbox',{name:'Select Before cabinets'})).not.toBeChecked();await expect(page.getByRole('checkbox',{name:'Select Finished cabinets'})).not.toBeChecked();
  await expect(page.getByRole('button',{name:'Save selected photos (2)',exact:true})).toHaveCount(0);await page.getByRole('button',{name:'Select before & after',exact:true}).click();
  await expect(page.getByRole('checkbox',{name:'Select Optional detail'})).not.toBeChecked();const save=page.getByRole('button',{name:'Save selected photos (2)',exact:true});await expect(save).toBeEnabled();
  await save.click();const data=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('qa-photo-share')!));
@@ -41,13 +41,13 @@ test('single before-and-after download contains both labeled views and selection
   Object.defineProperty(navigator,'clipboard',{value:{writeText:async()=>{}}});
  });
  await page.route(googleReviewURL,r=>r.fulfill({body:'Mock Google review form. No photos or feedback are submitted.'}));
- await page.goto(site+'?code='+code);await page.getByRole('button',{name:'Select before & after',exact:true}).click();
+ await page.goto(site+'?code='+code);await startDraft(page);await page.getByLabel('Your review',{exact:true}).fill('My feedback stays mine.');await approveReview(page);await page.getByRole('button',{name:'Select before & after',exact:true}).click();
  await page.getByText('Save as one before-and-after photo',{exact:true}).click();
  const downloadPromise=page.waitForEvent('download');await page.getByRole('button',{name:'Download before-and-after photo',exact:true}).click();const download=await downloadPromise;
  expect(download.suggestedFilename()).toBe('Spray-Net-before-and-after.jpg');const path=await download.path();expect(path).toBeTruthy();const metadata=await sharp(path!).metadata();expect(metadata.format).toBe('jpeg');expect([metadata.width,metadata.height]).toEqual([1600,760]);
  const {data,info}=await sharp(path!).removeAlpha().raw().toBuffer({resolveWithObject:true});const pixel=(x:number,y:number)=>Array.from(data.subarray((y*info.width+x)*info.channels,(y*info.width+x)*info.channels+3));
  const before=pixel(400,380),after=pixel(1200,380);expect(before[0]).toBeGreaterThan(210);expect(before[2]).toBeLessThan(60);expect(after[2]).toBeGreaterThan(210);expect(after[0]).toBeLessThan(60);
- await expect(page.getByRole('status')).toContainText('Download requested.');await page.getByLabel('Your review',{exact:true}).fill('My feedback stays mine.');await page.getByRole('checkbox',{name:'I’ve checked this text.'}).check();await page.getByRole('button',{name:'Copy review & open Google',exact:true}).click();await expect(page).toHaveURL(googleReviewURL);await page.goBack();
+ await expect(page.getByRole('status')).toContainText('Download requested.');await page.getByRole('button',{name:'Continue to sharing',exact:true}).click();await page.getByRole('button',{name:'Paste my review to Google',exact:true}).click();await expect(page).toHaveURL(googleReviewURL);await page.goBack();await page.getByRole('button',{name:'Save photos again',exact:true}).click();
  await expect(page.getByRole('checkbox',{name:'Select Before cabinets'})).toBeChecked();await expect(page.getByRole('checkbox',{name:'Select Finished cabinets'})).toBeChecked();await expect(page.getByRole('checkbox',{name:'Select Optional detail'})).not.toBeChecked();
  if(await page.locator('details.photo-bundle').getAttribute('open')===null)await page.getByText('Save as one before-and-after photo',{exact:true}).click();
  await expect(page.getByRole('button',{name:'Download before-and-after photo',exact:true})).toBeEnabled();
@@ -59,7 +59,7 @@ test('canceled or denied photo menu keeps originals available and does not silen
   Object.defineProperty(navigator,'canShare',{value:()=>true});
   Object.defineProperty(navigator,'share',{configurable:true,value:()=>Promise.reject(new DOMException('Canceled','AbortError'))});
  });
- let downloads=0;page.on('download',()=>downloads++);await page.goto(site+'?code='+code);await page.getByRole('button',{name:'Select before & after',exact:true}).click();
+ let downloads=0;page.on('download',()=>downloads++);await page.goto(site+'?code='+code);await startDraft(page);await page.getByLabel('Your review',{exact:true}).fill('My feedback stays mine.');await approveReview(page);await page.getByRole('button',{name:'Select before & after',exact:true}).click();
  await page.getByText('Save as one before-and-after photo',{exact:true}).click();
  await page.getByRole('button',{name:'Save before-and-after photo',exact:true}).click();await expect(page.getByRole('status')).toContainText('Photo menu canceled.');expect(downloads).toBe(0);
  await page.getByRole('checkbox',{name:'Select Finished cabinets'}).uncheck();await expect(page.getByRole('button',{name:'Save selected photos (1)',exact:true})).toBeEnabled();
@@ -69,7 +69,7 @@ test('canceled or denied photo menu keeps originals available and does not silen
 
 test('unavailable photos show a retry; no fake saved or uploaded status',async({page})=>{
  await page.route('**/api/customer/*/photo/*?download=1',route=>route.fulfill({status:404,json:{error:'Unavailable'}}));
- await page.goto(site+'?code='+code);await page.getByRole('button',{name:'Select before & after',exact:true}).click();
+ await page.goto(site+'?code='+code);await startDraft(page);await page.getByLabel('Your review',{exact:true}).fill('My feedback stays mine.');await approveReview(page);await page.getByRole('button',{name:'Select before & after',exact:true}).click();
  await expect(page.getByRole('alert')).toContainText('selected photo is unavailable');await expect(page.getByRole('button',{name:'Retry photo preparation'})).toBeEnabled();await expect(page.getByRole('button',{name:/^(Save|Download) before-and-after photo$/})).toHaveCount(0);
  await page.unroute('**/api/customer/*/photo/*?download=1');await page.getByRole('button',{name:'Retry photo preparation'}).click();await expect(page.getByText('Save as one before-and-after photo',{exact:true})).toBeVisible();
 });
