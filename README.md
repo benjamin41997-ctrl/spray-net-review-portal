@@ -24,7 +24,7 @@ The printed link points to GitHub Pages even if the backend moves. Update the pu
 
 Open http://127.0.0.1:5173/spray-net-review-portal/?admin=1 and choose **Enter local admin preview**. This explicit simulated sign-in only works with the loopback development API. Production never accepts its token or exposes its sign-in endpoint.
 
-The sample kitchen is clearly labeled as Spray-Net network imagery, not a South Charlotte job. No real review links or transcription credentials are connected. Sample data from the earlier prototype has been retained locally.
+The sample kitchen is clearly labeled as Spray-Net network imagery, not a South Charlotte job. The supplied Google review link is connected; transcription credentials are not connected. Do not submit sample feedback to the real listing. Sample data from the earlier prototype has been retained locally.
 
 ```powershell
 # Installed checkout:
@@ -92,6 +92,18 @@ As checked October 2, 2026, [Workers Free](https://developers.cloudflare.com/wor
 
 [Supabase](https://supabase.com/pricing) has a free plan; reusing the existing project's authentication avoids adding another database project, but its current plan, shared quotas, availability, and email provider still need review. Email delivery and OpenAI usage can add separate costs. No plan change is implied or authorized by this implementation.
 
+## Google handoff
+
+New jobs default to the supplied official link: [Spray-Net South Charlotte on Google](https://g.page/r/CdBR4AUNk5DkEAI/review). Administrators can change or remove it while editing a job. Existing job destinations are preserved; the local demo has been connected explicitly. Angi/Thumbtack source ordering remains unchanged.
+
+After the customer checks their text, **Copy review & open Google** copies the approved text and opens that exact link in the same tab. This avoids asynchronous pop-up blocking. The customer pastes into Google, chooses their own stars, optionally attaches saved photos, and submits. No customer text is added to a URL or sent through an import endpoint. Clipboard failure keeps the portal open, selects the draft, and gives manual-copy instructions. **Continue to Google** is always available without drafting or approval.
+
+[Google requires a Google Account](https://support.google.com/business/answer/3474122?hl=en), including accounts with a non-Gmail email. Google handles its own sign-in; the portal cannot inspect Google cookies or guarantee that a browser and the Maps app share a session. Opening Google first is available for customers who want to sign in before drafting. A separate portal Google login would add friction and would not establish a Maps/browser session.
+
+The [documented Business Profile review API](https://developers.google.com/my-business/reference/rest/v4/accounts.locations.reviews) supports reading reviews and managing business replies; it has no method to create/import customer reviews or prefill the public review form. This integration uses the official review link and customer-controlled clipboard handoff.
+
+The real supplied link was opened read-only in the available signed-in browser and displayed the Spray-Net South Charlotte review composer. No rating, text, photos, or review was submitted. The signed-out native flow was not exercised because this browser already has a Google session. Automated mobile tests intercept the external link and cover exact approved copying, denied clipboard, direct access, Back/draft recovery, default/override links, and accurate click-only metrics. They do not verify live Google sign-in or publication.
+
 ## Review editing and daily use
 
 Prepare page, upload/reorder/label photos, add official platform links, preview, assign a sticker, and activate. Draft/unassigned codes show that the page is not ready. Archive disables access and can later be reversed for the same job. Delete removes customer data and permanently retires its codes.
@@ -114,7 +126,7 @@ node scripts/preview-static.mjs
 npm test
 ```
 
-The 30-check suite passes in Chromium Pixel 7 and WebKit iPhone 13 emulation. It covers static repository paths, permanent query links, job content updates with unchanged links, concurrent immutable assignments, archived/deleted access, authenticated images, cross-origin downloads, scanned-sticker creation, protected previews, draft restoration after external navigation, accurate metrics, QR PDFs, mobile layout and Axe checks. Auth tests require provider-verified confirmed allowlisted identity and reject forged tokens, anonymous users and production mock sign-in.
+The 38-check suite passes in Chromium Pixel 7 and WebKit iPhone 13 emulation. It covers static repository paths, permanent query links, job content updates with unchanged links, concurrent immutable assignments, archived/deleted access, authenticated images, cross-origin downloads, scanned-sticker creation, protected previews, draft restoration after external navigation, accurate metrics, QR PDFs, mobile layout and Axe checks. Auth tests require provider-verified confirmed allowlisted identity and reject forged tokens, anonymous users and production mock sign-in.
 
 Production tests serve only `dist/site` with no application server, bridge its requests to the local API using test interception, and verify that mock login cannot be enabled through public configuration. No live Supabase or OpenAI calls are made. Chromium recording uses synthetic audio/mocked processing; Windows WebKit lacks MediaRecorder, so its typing fallback is tested. Physical iOS/Android app flows, real email delivery, live transcription, and printer readability remain launch checks.
 
@@ -124,7 +136,7 @@ GitHub checks build both artifacts and run the local/browser suite. The deployme
 
 ## Platform findings, checked October 2, 2026
 
-Use account-issued links, including per-customer native links when available. Test URLs are placeholders. Actual authenticated mobile submission flows still need your listing links and phones.
+Use account-issued links, including per-customer native links when available. Google uses the supplied business link; other test URLs are placeholders. Native mobile app flows still need physical-device checks.
 
 | Platform | Implementation and documented limits |
 | --- | --- |

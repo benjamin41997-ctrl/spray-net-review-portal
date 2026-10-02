@@ -1,6 +1,7 @@
 import type {Env} from './types';
 import {createPortal,HttpError,platforms} from './portal';
 import {isLocal} from './auth';
+import {googleReviewURL} from '../lib/business';
 function json(v:unknown,status=200){return Response.json(v,{status,headers:{'Cache-Control':'no-store','Referrer-Policy':'no-referrer'}});}
 export async function handle(r:Request,env:Env){const {db,bucket,requireAdmin,sameOrigin,body,clean,links,token,getJob,resolveQR,publicJob,settings,rate,event}=createPortal(env,r);try{const p=new URL(r.url).pathname.split('/').filter(Boolean).slice(1);const method=r.method;
  if(method!=='GET')sameOrigin(r);
@@ -13,7 +14,8 @@ export async function handle(r:Request,env:Env){const {db,bucket,requireAdmin,sa
    return json({jobs:jobs.map((j:any)=>({...j,links:JSON.parse(j.links)})),qrs,settings:settings()});
   }
   if(p[1]==='jobs'&&!p[2]&&method==='POST'){const b=await body(r);const source=clean(b.source);if(!['direct','training','angi','thumbtack','other'].includes(source))throw new HttpError(400,'Choose a customer source.');const id=crypto.randomUUID();
-   await db().prepare('INSERT INTO jobs(id,internal_name,title,source,links,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').bind(id,clean(b.internal_name),clean(b.title),source,JSON.stringify(links(b.links)),now,now).run();return json(await getJob(id),201);}
+   const suppliedLinks=links(b.links);const initialLinks={google:googleReviewURL,...suppliedLinks};
+   await db().prepare('INSERT INTO jobs(id,internal_name,title,source,links,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').bind(id,clean(b.internal_name),clean(b.title),source,JSON.stringify(initialLinks),now,now).run();return json(await getJob(id),201);}
   if(p[1]==='jobs'&&p[2]){const id=p[2];
    if(method==='GET')return json(await getJob(id));
    if(method==='PATCH'){const b=await body(r);const source=clean(b.source);if(!['direct','training','angi','thumbtack','other'].includes(source)||!['draft','active','archived'].includes(b.status)||!Number.isInteger(b.revision))throw new HttpError(400,'Check the project fields.');const safeLinks=links(b.links);
@@ -40,7 +42,7 @@ export async function handle(r:Request,env:Env){const {db,bucket,requireAdmin,sa
    if(method==='DELETE'){await db().prepare('DELETE FROM photos WHERE id=?').bind(p[2]).run();await bucket().delete(photo.object_key);return json({deleted:true});}
   }
   if(p[1]==='seed'&&method==='POST'){if(!isLocal(r,env))throw new HttpError(404,'Unavailable.');if(await db().prepare("SELECT id FROM jobs WHERE id='sample-kitchen'").first())return json(await getJob('sample-kitchen'));
-   await db().prepare('INSERT INTO jobs(id,internal_name,title,source,status,links,demo,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)').bind('sample-kitchen','Sample kitchen · network photos','Your kitchen transformation','training','active','{}',1,now,now).run();
+   await db().prepare('INSERT INTO jobs(id,internal_name,title,source,status,links,demo,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)').bind('sample-kitchen','Sample kitchen · network photos','Your kitchen transformation','training','active',JSON.stringify({google:googleReviewURL}),1,now,now).run();
    for(const kind of ['before','after']){const f=await fetch(new URL(`sample/${kind}.webp`,settings().origin));if(!f.ok)throw new HttpError(503,'Sample images unavailable.');const key=`jobs/sample-kitchen/${kind}`;await bucket().put(key,await f.arrayBuffer(),{httpMetadata:{contentType:'image/webp'}});await db().prepare('INSERT INTO photos VALUES(?,?,?,?,?,?,?)').bind(`sample-${kind}`,'sample-kitchen',key,kind==='before'?'Before refinishing':'Finished cabinets',kind,kind==='before'?0:1,'image/webp').run();}
    await db().prepare('INSERT INTO qr_codes(token,label,batch_id,job_id,assigned_at,created_at) VALUES(?,?,?,?,?,?)').bind(token(),'DEMO-001','demo','sample-kitchen',now,now).run();return json(await getJob('sample-kitchen'));}
  }
