@@ -42,6 +42,19 @@ test('selection downloads only chosen photos and selections survive Google and a
  await expect(page.getByRole('checkbox',{name:'Select Before cabinets'})).not.toBeChecked();await expect(page.getByRole('checkbox',{name:'Select Finished cabinets'})).toBeChecked();await expect(page.getByRole('checkbox',{name:'Select Optional detail'})).not.toBeChecked();
 });
 
+test('saving all photos again requests a fresh set after Back and Save photos again',async({page})=>{
+ const downloads:Download[]=[];page.on('download',d=>downloads.push(d));await photos(page);
+ const save=page.getByRole('button',{name:'Save and share all photos',exact:true});
+ await save.click();await expect.poll(()=>downloads.length).toBe(3);
+ await expect(page.getByRole('heading',{name:'Ready to share',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Back',exact:true}).click();await expect(save).toBeEnabled();
+ await save.click();await expect.poll(()=>downloads.length).toBe(6);
+ await expect(page.getByRole('heading',{name:'Ready to share',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Save photos again',exact:true}).click();await expect(save).toBeEnabled();
+ await save.click();await expect.poll(()=>downloads.length).toBe(9);
+ expect(downloads.map(d=>d.suggestedFilename())).toEqual(Array(3).fill(['Spray-Net-before-01.jpg','Spray-Net-after-02.jpg','Spray-Net-detail-03.jpg']).flat());
+});
+
 test('opt-out still offers downloads for personal use and keeps photo inclusion off after reload',async({page})=>{
  const downloads:Download[]=[];page.on('download',d=>downloads.push(d));await photos(page);await page.getByRole('button',{name:skipPhotoLabel,exact:true}).click();
  expect(downloads).toHaveLength(0);await expect(page.getByRole('button',{name:'Download photos for myself',exact:true})).toBeEnabled();
