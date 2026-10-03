@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './test';
 import {handle} from '../backend/api';
 import type {Env} from '../backend/types';
 import {reviewEditingInstructions} from '../backend/review-editor';

@@ -1,4 +1,4 @@
-import {test,expect,type APIRequestContext,type Download} from '@playwright/test';
+import {test,expect,type APIRequestContext,type Download} from './test';
 import sharp from 'sharp';
 import AxeBuilder from '@axe-core/playwright';
 import {login,site,fixture,patch,startDraft,approveReview} from './helpers';

@@ -1,4 +1,4 @@
-import {test,expect,type APIRequestContext} from '@playwright/test';
+import {test,expect,type APIRequestContext} from './test';
 import AxeBuilder from '@axe-core/playwright';
 import {mkdir} from 'node:fs/promises';
 import {login,browserAdmin,site,apiBase,origin,fixture,make,patch,startDraft,approveReview,returnToCheck} from './helpers';
@@ -62,7 +62,9 @@ test('malformed links, batches and files are rejected',async()=>{
 });
 
 test('draft survives external app return and metrics never claim publication',async({page})=>{
- const j=await make(admin),code=codes.shift()!;await admin.post('/api/admin/assign',{data:{token:code,job_id:j.id}});await patch(admin,j,'active');await page.goto(site+'?code='+code);
+ const j=await make(admin),code=codes.shift()!;await admin.post('/api/admin/assign',{data:{token:code,job_id:j.id}});await patch(admin,j,'active');
+ await page.route('**/api/customer/'+code,async route=>{const response=await route.fetch();const data=await response.json();data.settings={transcription:false,cleanup:false};await route.fulfill({response,json:data});});
+ await page.goto(site+'?code='+code);
  await startDraft(page);const review='Cabinets look good. The start was a day late.';await page.getByLabel('Your review',{exact:true}).fill(review);await approveReview(page);await page.reload();await expect(page.getByLabel('Your review',{exact:true})).toHaveValue(review);await expect(page.getByRole('button',{name:'Paste my review to Google',exact:true})).toBeEnabled();
  expect(await page.locator('.destination a.button').first().textContent()).toContain('Angi');await expect(page.getByRole('link',{name:'Continue to Yelp'})).toHaveCount(0);await expect(page.getByRole('link',{name:'Business information on Yelp'})).toBeVisible();
  await page.route('https://www.angi.com/write-review/test',r=>r.fulfill({body:'Mock external platform; no review is published.'}));const external=page.waitForEvent('popup');await page.getByRole('link',{name:'Continue to Angi'}).click();const other=await external;await other.close();await page.reload();await expect(page.getByLabel('Your review',{exact:true})).toHaveValue(review);

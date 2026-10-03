@@ -18,7 +18,13 @@ https://benjamin41997-ctrl.github.io/spray-net-review-portal/?code=RANDOM_TOKEN
 
 The static application asks the secure backend which job belongs to that token and displays the matching photos/review options. You can generate 100 stickers, grab any unused one, assign it later, and keep updating the original job. Assignment is permanent; deleted jobs retire their codes. Tokens have 192 bits of randomness. This uses one reusable page and needs no GitHub redirects or rewrite rules.
 
-The printed link points to GitHub Pages even if the backend moves. Update the public configuration and migrate the database/photos while preserving token assignments. Keep the GitHub account, repository name/path, and published page available. **No repository has been pushed or published yet; this is the prepared URL, not a live site.**
+The printed link points to GitHub Pages even if the backend moves. Update the public configuration and migrate the database/photos while preserving token assignments. Keep the GitHub account, repository name/path, and published page available. Check the Pages deployment in GitHub Actions for the current publishing status. **The online preview is for device testing; live customer stickers require the hosted backend and production token assignments.**
+
+## Online device preview
+
+When backend connection settings are blank, the main Pages URL opens a clearly labeled sample customer flow. With a connected backend, `?demo=1` explicitly opens that same preview. It uses only the checked-in Spray-Net network sample images and a fictional display name. Typed drafts, approval, photo selection, JPEG downloads, copy-to-clipboard, and device-local draft recovery work without a server. It does not simulate AI or transcription, collect activity, permit admin access, or open the real Google listing. The copy button demonstrates copying and then explains that Google was not opened. A customer `?code=...` link never silently falls back to a sample project.
+
+Pushing changes to `master` publishes the Pages interface automatically. The manual **Publish review portal to GitHub Pages** action is also available. When no backend URL is set, it can publish the sample preview without credentials. Once `REVIEW_API_BASE_URL` is configured, it requires all public backend/auth settings. Manually checking **Require the hosted backend and admin configuration** applies that requirement as well. This workflow publishes only the static interface; backend code and model/prompt changes need a separate Worker deployment after backend launch.
 
 ## Working local preview
 
@@ -71,15 +77,15 @@ Client-supplied identity headers are never trusted. Neither the static site nor 
 
 The configuration script rejects credentials in URLs and private Supabase keys. **OpenAI keys, SMTP passwords, admin access tokens, and service-role keys never belong here or in repository variables used to build the website.** Backend secrets are separate from public Pages settings.
 
-## Prepare deployment; publish after review
+## Connect the hosted backend
 
 1. Create the intended GitHub repository and push the reviewed source. Select **GitHub Actions** as its Pages publishing source. Confirm the permanent URL before live printing.
 2. In Cloudflare, prepare the D1 database and private R2 bucket. Replace the placeholder database ID in `wrangler.jsonc`. `wrangler.local.jsonc` uses only local preview storage. No cloud resources have been provisioned by this build.
 3. Configure Worker secrets: `ADMIN_EMAILS` with the three approved addresses, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and optionally `OPENAI_API_KEY`. Keep `ENVIRONMENT=production` and `ENABLE_AI_CLEANUP=false`. Set `PUBLIC_PORTAL_URL` to the full GitHub URL and `ALLOWED_ORIGINS` to its origin, e.g. `https://benjamin41997-ctrl.github.io`. Do not upload `LOCAL_ADMIN_TOKEN`.
 4. Apply `drizzle/0000_high_rictor.sql` to the production database once, then deploy the Worker. Local preview state is not automatically copied to production. Start production sticker batches in that production database.
 5. In Supabase, prepare existing confirmed admin accounts for the three approved emails and allow the exact callback URL `https://benjamin41997-ctrl.github.io/spray-net-review-portal/?admin=1`. The UI uses `shouldCreateUser:false`, so login does not create accounts. Check [passwordless setup](https://supabase.com/docs/guides/auth/auth-email-passwordless) and [email delivery requirements](https://supabase.com/docs/guides/auth/auth-smtp); configure reliable delivery for all approved recipients before launch. Do not change another application's Site URL or email template without reviewing its impact.
-6. Set GitHub repository variables `REVIEW_API_BASE_URL`, `REVIEW_SUPABASE_URL`, and `REVIEW_SUPABASE_PUBLISHABLE_KEY`. These values are public. The manual Pages workflow computes the portal URL/repository base path and refuses to publish if the connection settings are missing.
-7. Run **Publish review portal to GitHub Pages** manually after approval. Only `dist/site` is uploaded; the Worker, database files, credentials, customer records, and local test sheets are excluded.
+6. Set GitHub repository variables `REVIEW_API_BASE_URL`, `REVIEW_SUPABASE_URL`, and `REVIEW_SUPABASE_PUBLISHABLE_KEY`. These values are public. The Pages workflow computes the portal URL/repository base path and requires complete connection settings when a backend URL is supplied or connected mode is requested.
+7. Run **Publish review portal to GitHub Pages**, or push the next interface update. Only `dist/site` is uploaded; the Worker, database files, credentials, customer records, and local test sheets are excluded.
 8. Test the actual hosted email sign-in, job creation/assignment, photo saving, native platform links, and optional transcription. Print and scan one live sticker at 100% scale on the intended stock before distributing a batch.
 
 `npm run backend:build` is a **dry run** that produces `dist/api` without deploying. No automated backend deployment or paid-service provisioning is included. The static build and Worker bundle are both prepared and checked locally.

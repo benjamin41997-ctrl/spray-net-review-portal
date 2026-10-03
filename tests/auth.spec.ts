@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './test';
 import {authenticate} from '../backend/auth';
 import worker from '../backend/worker';
 import type {Env} from '../backend/types';

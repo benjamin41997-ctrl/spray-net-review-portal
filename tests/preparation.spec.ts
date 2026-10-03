@@ -1,4 +1,4 @@
-import {test,expect,type Page} from '@playwright/test';
+import {test,expect,type Page} from './test';
 import AxeBuilder from '@axe-core/playwright';
 import {login,browserAdmin,site,origin,startDraft} from './helpers';
 

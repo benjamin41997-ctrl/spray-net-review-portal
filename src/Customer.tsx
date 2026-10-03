@@ -13,7 +13,7 @@ import ReviewPreparation,{type PreparationPhase} from './ReviewPreparation';
 type CustomerJob={id:string;title:string;source:string;demo:boolean;links:Record<string,string>;photos:{id:string;kind:string;label:string}[]};
 type Stage='welcome'|'compose'|'check'|'photos'|'share';
 const stages:Stage[]=['welcome','compose','check','photos','share'];
-export default function Customer({token,initial:job,capabilities,preview,admin,jobPreview=false}:{token:string;initial:CustomerJob;capabilities:{transcription:boolean;cleanup:boolean};preview:boolean;admin:boolean;jobPreview?:boolean}){
+export default function Customer({token,initial:job,capabilities,preview,admin,jobPreview=false,staticDemo=false}:{token:string;initial:CustomerJob;capabilities:{transcription:boolean;cleanup:boolean};preview:boolean;admin:boolean;jobPreview?:boolean;staticDemo?:boolean}){
  const [stage,setStage]=useState<Stage>('welcome');
  const [mode,setMode]=useState<'type'|'voice'>('type');const [autoFormat,setAutoFormat]=useState(true);const [photoChoiceMade,setPhotoChoiceMade]=useState(false);
  const [text,setText]=useState('');const [original,setOriginal]=useState('');const [aiEdited,setAiEdited]=useState(false);
@@ -27,7 +27,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
  const recordingTimer=useRef<ReturnType<typeof setInterval>|null>(null);const limitTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
  const textarea=useRef<HTMLTextAreaElement>(null);const heading=useRef<HTMLHeadingElement>(null);
  const key=`spraynet-review:v1:${token}`;const base=`customer/${token}`;
- const photoURL=(id:string,download=false)=>remotePhotoURL(jobPreview?`admin/photos/${id}`:`${base}/photo/${id}`,{preview,download});
+ const photoURL=(id:string,download=false)=>staticDemo?assetURL(`sample/${id}.webp`):remotePhotoURL(jobPreview?`admin/photos/${id}`:`${base}/photo/${id}`,{preview,download});
  function update(v:string){setText(v);setApproved(false);setEditingError('');}
  async function track(type:string,platform?:string){
   if(preview)return;
@@ -102,8 +102,8 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
  const editor=<label>Your review<textarea aria-label="Your review" ref={textarea} disabled={!restored||recording||processing} maxLength={8000} value={text} onChange={e=>update(e.target.value)} placeholder="Write in your own words…"/></label>;
  return <main className="customer-shell guided">
   {admin&&<div className="actions"><a className="text-link" href={adminLink({assign:token})}>Manage this sticker</a></div>}
-  {preview&&<div className="notice">Administrator preview · activity is not counted.</div>}
-  {job.demo&&<div className="notice demo-notice">Sample project · please don’t submit sample feedback to a real listing.</div>}
+  {staticDemo?<div className="notice"><strong>Online preview · sample project</strong><details><summary>Preview details</summary><p>Try typing and downloading sample photos. AI, recorded voice transcription, and admin access need the hosted backend. Google posting is disabled; your draft stays on this device. These are Spray-Net network sample photos, not a South Charlotte customer job.</p></details></div>:preview&&<div className="notice">Administrator preview · activity is not counted.</div>}
+  {job.demo&&!staticDemo&&<div className="notice demo-notice">Sample project · please don’t submit sample feedback to a real listing.</div>}
   <header className="brand"><img src={assetURL('branding/logo.png')} alt="Spray-Net"/><p className="eyebrow">SOUTH CHARLOTTE</p></header>
   {stage!=='welcome'&&<><button className="quiet back-button" disabled={recording||processing} onClick={back}><ArrowLeft/>Back</button><ol className="review-progress" aria-label="Review steps">{['Write','Check','Photos','Share'].map((label,i)=><li key={label} aria-current={i===progress?'step':undefined} className={i===progress?'current':i<progress?'complete':''}><span>{i+1}</span>{label}</li>)}</ol></>}
   <div className="intro"><h1 ref={heading} tabIndex={-1}>{processing?(preparation==='microphone'?'Connecting your microphone…':'Preparing your review…'):titles[stage]}</h1>{stage==='welcome'&&<p>A few simple steps to share your experience.</p>}</div>
@@ -141,7 +141,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
    {!destinations.length&&<div className="notice">Review links haven’t been added yet. Your draft stays here.</div>}
    {destinations.map((p,i)=><div className="destination" key={p}>
     <div className="destination-heading"><h2>{platformNames[p]}</h2>{i===0&&destinations.length>1&&<span className="badge">Start here</span>}</div>
-    {p==='google'?<GoogleHandoff url={job.links[p]} text={text} approved={approved} photoCount={selected.length} includePhotos={selected.length>0} saveDraft={saveDraft} onContinue={()=>track('click',p)} onManualCopy={()=>{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});}}/>:<><small>{p==='apple'?'Apple Maps offers ratings and photos where available.':'Copy your review, then paste it and attach any saved photos on the next page.'}</small>{approved&&p!=='apple'&&<button className="secondary full" onClick={async()=>{try{await navigator.clipboard.writeText(text);toast.success('Review copied.');}catch{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});toast('Copy the selected text using your phone’s menu.');}}}>Copy review</button>}<a className="button full" href={job.links[p]} target="_blank" rel="noopener noreferrer" onClick={()=>{saveDraft();void track('click',p);}}>Continue to {platformNames[p]}</a></>}
+    {p==='google'?<GoogleHandoff url={job.links[p]} text={text} approved={approved} photoCount={selected.length} includePhotos={selected.length>0} saveDraft={saveDraft} previewOnly={staticDemo} onContinue={()=>track('click',p)} onManualCopy={()=>{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});}}/>:<><small>{p==='apple'?'Apple Maps offers ratings and photos where available.':'Copy your review, then paste it and attach any saved photos on the next page.'}</small>{approved&&p!=='apple'&&<button className="secondary full" onClick={async()=>{try{await navigator.clipboard.writeText(text);toast.success('Review copied.');}catch{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});toast('Copy the selected text using your phone’s menu.');}}}>Copy review</button>}<a className="button full" href={job.links[p]} target="_blank" rel="noopener noreferrer" onClick={()=>{saveDraft();void track('click',p);}}>Continue to {platformNames[p]}</a></>}
     <details className="completion"><summary>Already submitted your review?</summary><label className="selection-label"><Checkbox checked={reported.includes(p)} onCheckedChange={v=>{if(v===true){void track('reported',p);setReported([...reported,p]);}else setReported(reported.filter(x=>x!==p));}}/>I submitted on {platformNames[p]}</label><small>This is your confirmation; the portal cannot verify publication.</small></details>
    </div>)}
    <div className="share-extras">
