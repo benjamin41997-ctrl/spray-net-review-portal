@@ -1,6 +1,6 @@
 import {test,expect,type Page} from './test';
 import AxeBuilder from '@axe-core/playwright';
-import {login,browserAdmin,site,origin,startDraft,returnToCheck} from './helpers';
+import {login,browserAdmin,site,origin,startDraft} from './helpers';
 async function setup(page:Page,cleanup=true){
  const {admin,token}=await login();const sample=await(await admin.post('/api/admin/seed',{data:{}})).json();await admin.dispose();await browserAdmin(page,token);
  await page.route('**/api/customer/'+sample.qrs[0].token+'?preview=1',async route=>{const response=await route.fetch();const data=await response.json();data.settings={transcription:true,cleanup};await route.fulfill({response,json:data});});
@@ -20,8 +20,8 @@ test('recording, transcription and AI formatting preserve original wording and c
  await expect(page.getByRole('heading',{name:'Check your review',exact:true})).toBeVisible();await expect(page.getByLabel('Your review',{exact:true})).toHaveValue('The cabinets look good.\n\nWe started a day late.');
  if(await page.evaluate(()=>typeof MediaRecorder!=='undefined')){await page.getByText('Your recording',{exact:true}).click();await page.getByRole('button',{name:'Retry transcription',exact:true}).click();await expect(page.getByLabel('Your review',{exact:true})).toHaveValue('The cabinets look good.\n\nWe started a day late.');}
  await page.getByRole('button',{name:'Use my original wording',exact:true}).click();await expect(page.getByLabel('Your review',{exact:true})).toHaveValue(original);
- await page.getByRole('button',{name:'Go directly to review options',exact:true}).click();await expect(page.getByRole('button',{name:'Paste my review to Google',exact:true})).toBeDisabled();
- await returnToCheck(page);await page.getByRole('button',{name:'Next',exact:true}).click();await expect(page.getByRole('heading',{name:'Add your project photos'})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Go directly to review options',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Paste my review to Google',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'Next',exact:true}).click();await expect(page.getByRole('heading',{name:'Add your project photos'})).toBeVisible();
 });
 
 test('microphone permission denial or lack of recording support preserves the draft',async({page})=>{

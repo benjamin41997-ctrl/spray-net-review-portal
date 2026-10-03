@@ -20,14 +20,13 @@ test('unconnected Pages preview supports drafts and real photo downloads without
  await expect(page.locator('.photo-card img')).toHaveCount(2);
  await page.getByRole('button',{name:'Share all photos',exact:true}).click();
  await expect.poll(()=>downloads.length).toBe(2);expect(downloads.map(d=>d.suggestedFilename())).toEqual(['Spray-Net-before-01.jpg','Spray-Net-after-02.jpg']);
- await page.getByRole('button',{name:'Next',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Ready to share',exact:true})).toBeVisible();
  await expect(page.getByText('Import the 2 transformation photos you already downloaded.')).toBeVisible();
  await page.getByRole('button',{name:'Paste my review to Google',exact:true}).click();
- await expect(page.getByText('Preview: your review was copied. Google was not opened. Please do not post sample feedback.')).toBeVisible();
+ await expect(page.getByText('Review copied. This sample preview stops here; Google will open from a real customer page. Please don’t post sample feedback.')).toBeVisible();
  expect(await page.evaluate(()=>(window as any).copiedPreviewReview)).toBe(text);expect(page.url()).toBe(site);
- await page.getByText('Open Google without copying',{exact:true}).click();
- await page.getByRole('button',{name:'Continue to Google',exact:true}).click();
- await expect(page.getByText('Google is disabled in this preview. Please do not post sample feedback.')).toBeVisible();
+ await expect(page.getByText('Open Google without copying',{exact:true})).toHaveCount(0);
+ await expect(page.getByText('Already submitted your review?',{exact:true})).toHaveCount(0);
  expect(requests.every(url=>url.startsWith('http://127.0.0.1:4173/')||url.startsWith('blob:'))).toBe(true);
  expect(requests.some(url=>url.includes('/api/'))).toBe(false);
 });

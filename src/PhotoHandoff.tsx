@@ -8,9 +8,9 @@ import SecurePhoto from './SecurePhoto';
 
 type Photo={id:string;kind:string;label:string};
 type Prepared={key:string;files:Record<string,File>;failed:string[]};
-type Mode='choices'|'select'|'skip'|'downloaded';
+type Mode='choices'|'select'|'skip';
 export const skipPhotoLabel="Don't share my photos, I don't want neighbors to be envious";
-export default function PhotoHandoff({photos,selected,onSelect,photoURL,onContinue,onDownload}:{photos:Photo[];selected:string[];onSelect:(ids:string[])=>void;photoURL:(id:string)=>string;onContinue:()=>void;onDownload:(ids:string[])=>void}){
+export default function PhotoHandoff({photos,selected,onSelect,photoURL,onContinue,onDownload,recoveryOnly=false}:{photos:Photo[];selected:string[];onSelect:(ids:string[])=>void;photoURL:(id:string)=>string;onContinue:()=>void;onDownload:(ids:string[])=>void;recoveryOnly?:boolean}){
  const [mode,setMode]=useState<Mode>(selected.length===0?'skip':'choices');
  const [prepared,setPrepared]=useState<Prepared|null>(null);const [error,setError]=useState('');const [status,setStatus]=useState('');const [retry,setRetry]=useState(0);const [requested,setRequested]=useState<string[]>([]);
  const key=JSON.stringify(photos.map(p=>[p.id,photoURL(p.id)]));const ready=prepared?.key===key?prepared:null;
@@ -33,14 +33,19 @@ export default function PhotoHandoff({photos,selected,onSelect,photoURL,onContin
   for(const id of ids)saveFile(ready!.files[id],ready!.files[id].name);
   onDownload(ids);
   setRequested(ids);setStatus('Photo downloads requested. If your browser asks, allow multiple downloads. Look in Downloads or Files.');
-  if(!personal){onSelect(ids);setMode('downloaded');}
+  if(!personal){onSelect(ids);onContinue();}
  }
  function skip(){onSelect([]);setRequested([]);setStatus('');setMode('skip');}
+ const preparationStatus=<>
+  {!ready&&!error&&<small role="status"><Loader2 className="inline-loader"/>Preparing your photos…</small>}
+  {error&&<div className="notice error" role="alert">{error}<button className="secondary" onClick={()=>setRetry(v=>v+1)}>Retry photo preparation</button></div>}
+ </>;
+ const recovery=(ids:string[])=><details className="photo-options"><summary>Download didn’t start?</summary><small>Your browser may block several downloads at once. Tap each photo to download it separately. Look in Downloads or Files.</small>{recoveryOnly&&preparationStatus}<div className="actions">{photos.filter(p=>ids.includes(p.id)).map(p=><button className="secondary" key={p.id} disabled={!ready?.files[p.id]} onClick={()=>{saveFile(ready!.files[p.id],ready!.files[p.id].name);onDownload([p.id]);}}><Download/>Download {p.label}</button>)}</div></details>;
+ if(recoveryOnly)return recovery(selected);
  return <section className="panel stack" id="project-photos" aria-labelledby="photo-heading">
   <div><h2 id="photo-heading">Your project photos</h2><small>Project photos supplied by Spray-Net.</small></div>
   {(mode==='choices'||mode==='select')&&<div className="photo-grid">{photos.map(p=><figure className="photo-card" key={p.id}><SecurePhoto src={photoURL(p.id)} alt={p.label}/><span className="photo-type">{p.kind==='after'?'After':p.kind}</span>{mode==='select'?<label className="photo-caption"><Checkbox checked={selected.includes(p.id)} aria-label={`Select ${p.label}`} onCheckedChange={v=>onSelect(v===true?[...selected,p.id]:selected.filter(id=>id!==p.id))}/>{p.label}</label>:<figcaption className="photo-caption">{p.label}</figcaption>}</figure>)}</div>}
-  {!ready&&!error&&<small role="status"><Loader2 className="inline-loader"/>Preparing your photos…</small>}
-  {error&&<div className="notice error" role="alert">{error}<button className="secondary" onClick={()=>setRetry(v=>v+1)}>Retry photo preparation</button></div>}
+  {preparationStatus}
   {mode==='choices'&&<div className="stack photo-choices">
    <button className="full" disabled={!available(photos.map(p=>p.id))} onClick={()=>download(photos.map(p=>p.id))}><Download/>Share all photos</button>
    <button className="secondary full" onClick={()=>setMode('select')}>Select which photos to include</button>
@@ -57,12 +62,7 @@ export default function PhotoHandoff({photos,selected,onSelect,photoURL,onContin
    <button className="full" onClick={onContinue}>Next<ArrowRight/></button>
    <button className="quiet" onClick={()=>setMode('choices')}><ArrowLeft/>Back to photo options</button>
   </div>}
-  {mode==='downloaded'&&<div className="stack">
-   <p>On Google, tap “Add photos” and choose the images you downloaded. Look in Downloads or Files if they aren’t in Recents.</p>
-   <button className="full" onClick={onContinue}>Next<ArrowRight/></button>
-   <button className="quiet" onClick={()=>setMode('choices')}><ArrowLeft/>Back to photo options</button>
-  </div>}
   {status&&<div className="notice" role="status">{status}</div>}
-  {ready&&requested.length>0&&<details className="photo-options"><summary>Download didn’t start?</summary><small>Your browser may block several downloads at once. Tap each photo to download it separately.</small><div className="actions">{photos.filter(p=>requested.includes(p.id)).map(p=><button className="secondary" key={p.id} onClick={()=>saveFile(ready.files[p.id],ready.files[p.id].name)}><Download/>Download {p.label}</button>)}</div></details>}
+  {ready&&requested.length>0&&recovery(requested)}
  </section>;
 }

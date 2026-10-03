@@ -33,9 +33,11 @@ test('guided flow copies exactly the approved review and restores the sharing sc
  await startDraft(page);const text='The cabinets look good. Arrival was late.\nI would ask about scheduling next time.';
  await page.getByLabel('Your review',{exact:true}).fill(text);
  await page.getByRole('button',{name:'Next',exact:true}).click();
- await page.getByRole('button',{name:'Go directly to review options',exact:true}).click();
- const button=page.getByRole('button',{name:'Paste my review to Google',exact:true});await expect(button).toBeDisabled();
- await returnToCheck(page);await page.getByRole('button',{name:'Next',exact:true}).click();await expect(button).toBeEnabled();
+ await expect(page.getByRole('button',{name:'Go directly to review options',exact:true})).toHaveCount(0);
+ const button=page.getByRole('button',{name:'Paste my review to Google',exact:true});await expect(button).toHaveCount(0);
+ await expect(page.getByText('We’ve tidied the wording.',{exact:false})).toBeVisible();
+ await expect(page.getByText('Your draft is saved on this device for up to 30 days.',{exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'Next',exact:true}).click();await expect(button).toBeEnabled();
  await expect(page.getByText('Sign in to Google if prompted.',{exact:true})).toBeVisible();await expect(page.locator('.google-steps li')).toHaveCount(6);await expect(page.locator('.google-steps')).toHaveCSS('list-style-type','decimal');await expect(page.getByRole('button',{name:'Edit my review',exact:true})).toHaveCount(0);expect(await button.evaluate(el=>!!(el.compareDocumentPosition(document.querySelector('.share-extras')!)&Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
  expect((await new AxeBuilder({page}).analyze()).violations).toEqual([]);
  await page.screenshot({path:`.sites-runtime/qa/google-handoff-${test.info().project.name}.png`,fullPage:true});
@@ -45,22 +47,24 @@ test('guided flow copies exactly the approved review and restores the sharing sc
  expect(await page.evaluate(()=>sessionStorage.getItem('qa-copied-text'))).toBe(text);
  await expect.poll(async()=>(await row(j.id)).clicks).toBe(1);expect((await row(j.id)).reported).toBe(0);
  await returnToCheck(page);await page.getByLabel('Your review',{exact:true}).fill(text+' Updated.');
- await page.getByRole('button',{name:'Go directly to review options',exact:true}).click();await expect(button).toBeDisabled();
+ await expect(button).toHaveCount(0);await page.getByRole('button',{name:'Next',exact:true}).click();await expect(button).toBeEnabled();
  await admin.delete('/api/admin/jobs/'+j.id);
 });
 
-test('denied clipboard selects approved text, preserves draft and records no external click',async({page})=>{
+test('denied clipboard selects approved text and the same button continues after manual copying',async({page})=>{
  const {j,code}=await project();await page.addInitScript(()=>Object.defineProperty(navigator,'clipboard',{value:{writeText:async()=>{throw new DOMException('Denied','NotAllowedError');}}}));
  await page.goto(site+'?code='+code);await startDraft(page);const text='My honest feedback.';await page.getByLabel('Your review',{exact:true}).fill(text);await approveReview(page);
  await page.getByRole('button',{name:'Paste my review to Google',exact:true}).click();await expect(page.getByRole('status')).toContainText('couldn’t copy automatically');expect(page.url()).toBe(site+'?code='+code);
  expect(await page.getByLabel('Your review',{exact:true}).evaluate((el:HTMLTextAreaElement)=>el.value.slice(el.selectionStart,el.selectionEnd))).toBe(text);
- expect((await row(j.id)).clicks).toBe(0);await page.reload();await expect(page.getByLabel('Your review',{exact:true})).toHaveValue(text);await admin.delete('/api/admin/jobs/'+j.id);
+ expect((await row(j.id)).clicks).toBe(0);await page.route(googleReviewURL,r=>r.fulfill({body:'Mock Google; no public submission.'}));
+ await page.getByRole('button',{name:'Continue to Google',exact:true}).click();await expect(page).toHaveURL(googleReviewURL);await page.goBack();
+ await expect(page.getByLabel('Your review',{exact:true})).toHaveValue(text);await expect.poll(async()=>(await row(j.id)).clicks).toBe(1);expect((await row(j.id)).reported).toBe(0);await admin.delete('/api/admin/jobs/'+j.id);
 });
 
-test('direct Google link stays available without drafting, approval, or portal login',async({page,context})=>{
- const {j,code}=await project();await context.route(googleReviewURL,r=>r.fulfill({body:'Mock Google page; no public submission.'}));
- await page.goto(site+'?code='+code);await page.getByRole('button',{name:'Go directly to review options',exact:true}).click();await expect(page.getByRole('button',{name:'Paste my review to Google',exact:true})).toBeDisabled();
- const link=page.getByRole('link',{name:'Continue to Google',exact:true});await expect(link).toHaveAttribute('href',googleReviewURL);
- const popupPromise=page.waitForEvent('popup');await link.click();const popup=await popupPromise;await expect(popup).toHaveURL(googleReviewURL);await popup.close();
- await expect.poll(async()=>(await row(j.id)).clicks).toBe(1);expect((await row(j.id)).reported).toBe(0);await admin.delete('/api/admin/jobs/'+j.id);
+test('share screen has one Google action and no alternate opening or completion controls',async({page})=>{
+ const {j,code}=await project();await page.goto(site+'?code='+code);await startDraft(page);await page.getByLabel('Your review',{exact:true}).fill('My own feedback.');await approveReview(page);
+ await expect(page.locator('.destination button')).toHaveCount(1);
+ await expect(page.getByText('Open Google without copying',{exact:true})).toHaveCount(0);
+ await expect(page.getByText('Already submitted your review?',{exact:true})).toHaveCount(0);
+ expect((await row(j.id)).clicks).toBe(0);expect((await row(j.id)).reported).toBe(0);await admin.delete('/api/admin/jobs/'+j.id);
 });

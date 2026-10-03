@@ -21,7 +21,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
  const [restored,setRestored]=useState(false);const [storageIssue,setStorageIssue]=useState(false);
  const [recording,setRecording]=useState(false);const [preparation,setPreparation]=useState<PreparationPhase|null>(null);const processing=preparation!==null;
  const [seconds,setSeconds]=useState(0);const [audio,setAudio]=useState<Blob|null>(null);const [audioURL,setAudioURL]=useState('');
- const [reported,setReported]=useState<string[]>([]);const [editingError,setEditingError]=useState('');const [showReview,setShowReview]=useState(false);
+ const [editingError,setEditingError]=useState('');const [showReview,setShowReview]=useState(false);
  const recorder=useRef<MediaRecorder|null>(null);const stream=useRef<MediaStream|null>(null);
  const recordingBase=useRef('');const liveDraft=useRef({text,autoFormat});liveDraft.current={text,autoFormat};
  const recordingTimer=useRef<ReturnType<typeof setInterval>|null>(null);const limitTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
@@ -40,7 +40,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
    const draft=typeof v.text==='string'?v.text.slice(0,8000):'';
    setText(draft);setOriginal(typeof v.original==='string'?v.original.slice(0,8000):'');setAiEdited(v.aiEdited===true);
    const explicitPhotos=v.photoChoiceMade===true||(Array.isArray(v.selected)&&v.selected.length>0);setPhotoChoiceMade(explicitPhotos);setSelected(explicitPhotos?v.selected.filter((id:string)=>job.photos.some(p=>p.id===id)):job.photos.map(p=>p.id));
-   setApproved(v.approved===true&&!!draft.trim());setReported(Array.isArray(v.reported)?v.reported:[]);
+   setApproved(v.approved===true&&!!draft.trim());
    setDownloaded((Array.isArray(v.downloaded)?v.downloaded:[]).filter((id:string)=>job.photos.some(p=>p.id===id)));setMode(v.mode==='voice'?'voice':'type');setAutoFormat(v.autoFormat!==false);
    const saved:Stage=stages.includes(v.stage)?v.stage:draft?'compose':'welcome';
    setStage(saved==='photos'&&!v.approved?'check':saved);
@@ -50,10 +50,10 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
   if(context?.registerTool){Promise.resolve(context.registerTool({name:'stage_review_text',description:'Place customer-provided text in the editable draft. Does not approve, publish or improve it.',inputSchema:{type:'object',properties:{text:{type:'string',maxLength:8000}},required:['text'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:true},execute(input:any){if(typeof input.text!=='string'||input.text.length>8000)throw Error('Text must be at most 8000 characters.');update(input.text);setStage('compose');return {staged:true,approved:false,published:false};}},{signal:lifecycle.signal})).catch(()=>{});}
   return()=>{lifecycle.abort();if(recordingTimer.current)clearInterval(recordingTimer.current);if(limitTimer.current)clearTimeout(limitTimer.current);if(recorder.current){recorder.current.onstop=null;if(recorder.current.state==='recording')recorder.current.stop();}stream.current?.getTracks().forEach(t=>t.stop());};
  },[key]);
- function saveDraft(){if(!restored)return;try{localStorage.setItem(key,JSON.stringify({text,original,aiEdited,selected,downloaded,approved,reported,stage,mode,autoFormat,photoChoiceMade,savedAt:Date.now()}));}catch{setStorageIssue(true);}}
+ function saveDraft(){if(!restored)return;try{localStorage.setItem(key,JSON.stringify({text,original,aiEdited,selected,downloaded,approved,stage,mode,autoFormat,photoChoiceMade,savedAt:Date.now()}));}catch{setStorageIssue(true);}}
  // Persist before painting the next step: reload/navigation immediately after
  // an AI response must not restore the previous wording or approval state.
- useLayoutEffect(saveDraft,[text,original,aiEdited,selected,downloaded,approved,reported,stage,mode,autoFormat,photoChoiceMade,restored,key]);
+ useLayoutEffect(saveDraft,[text,original,aiEdited,selected,downloaded,approved,stage,mode,autoFormat,photoChoiceMade,restored,key]);
  useEffect(()=>{if(restored){heading.current?.focus({preventScroll:true});window.scrollTo({top:0,behavior:'instant'});}},[stage,restored,processing]);
  useEffect(()=>{if(!audio){setAudioURL('');return;}const u=URL.createObjectURL(audio);setAudioURL(u);return()=>URL.revokeObjectURL(u);},[audio]);
  function stop(){if(recordingTimer.current)clearInterval(recordingTimer.current);if(limitTimer.current)clearTimeout(limitTimer.current);if(recorder.current?.state==='recording'){setPreparation('transcribing');recorder.current.stop();}stream.current?.getTracks().forEach(t=>t.stop());setRecording(false);}
@@ -93,7 +93,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
   }catch(e){setEditingError((e as Error).message);setAiEdited(false);}finally{setPreparation(null);setStage('check');}
  }
  function back(){if(stage==='compose')setStage('welcome');else if(stage==='check')setStage('compose');else if(stage==='photos')setStage('check');else if(stage==='share')setStage(approved&&job.photos.length?'photos':text?'check':'welcome');}
- function clear(){update('');setOriginal('');setAiEdited(false);setSelected(job.photos.map(p=>p.id));setDownloaded([]);setPhotoChoiceMade(false);setAutoFormat(true);setReported([]);setAudio(null);setStage('welcome');toast('Draft cleared on this device.');}
+ function clear(){update('');setOriginal('');setAiEdited(false);setSelected(job.photos.map(p=>p.id));setDownloaded([]);setPhotoChoiceMade(false);setAutoFormat(true);setAudio(null);setStage('welcome');toast('Draft cleared on this device.');}
  const destinations=orderedPlatforms(job.source,job.links);
  const titles:Record<Stage,string>={welcome:publicGreeting(job.title),compose:mode==='voice'?'Speak your review':'Type your review',check:'Check your review',photos:'Add your project photos',share:'Ready to share'};
  const progress=stage==='compose'?0:stage==='check'?1:stage==='photos'?2:3;
@@ -124,7 +124,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
    <button className="full" disabled={!text.trim()||processing||recording} onClick={()=>check()}>{processing?<Loader2/>:<ArrowRight/>}{processing?'Preparing your review…':'Next'}</button>
   </section>}
   {stage==='check'&&!processing&&<section className="panel stack">
-   <p>{aiEdited?'AI tidied your wording. Please check that everything is accurate and change anything you like.':'Read your review and change anything you like.'}</p>
+   <p>{aiEdited?'We’ve tidied the wording. Please check that it reflects your experience and change anything you like.':'Read your review and change anything you like.'}</p>
    {editingError&&<div className="notice error" role="alert">{editingError} Your words are still here.</div>}
    {editor}
    {original&&original!==text&&<><button className="secondary" disabled={processing} onClick={()=>{update(original);setAiEdited(false);}}><RotateCcw/>Use my original wording</button><details className="original-review"><summary>See my original wording</summary><blockquote>{original}</blockquote></details></>}
@@ -142,15 +142,15 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
    {destinations.map((p,i)=><div className="destination" key={p}>
     <div className="destination-heading"><h2>{platformNames[p]}</h2>{i===0&&destinations.length>1&&<span className="badge">Start here</span>}</div>
     {p==='google'?<GoogleHandoff url={job.links[p]} text={text} approved={approved} photoCount={selected.length} includePhotos={selected.length>0} saveDraft={saveDraft} previewOnly={staticDemo} onContinue={()=>track('click',p)} onManualCopy={()=>{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});}}/>:<><small>{p==='apple'?'Apple Maps offers ratings and photos where available.':'Copy your review, then paste it and attach any saved photos on the next page.'}</small>{approved&&p!=='apple'&&<button className="secondary full" onClick={async()=>{try{await navigator.clipboard.writeText(text);toast.success('Review copied.');}catch{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});toast('Copy the selected text using your phone’s menu.');}}}>Copy review</button>}<a className="button full" href={job.links[p]} target="_blank" rel="noopener noreferrer" onClick={()=>{saveDraft();void track('click',p);}}>Continue to {platformNames[p]}</a></>}
-    <details className="completion"><summary>Already submitted your review?</summary><label className="selection-label"><Checkbox checked={reported.includes(p)} onCheckedChange={v=>{if(v===true){void track('reported',p);setReported([...reported,p]);}else setReported(reported.filter(x=>x!==p));}}/>I submitted on {platformNames[p]}</label><small>This is your confirmation; the portal cannot verify publication.</small></details>
    </div>)}
    <div className="share-extras">
+    {selected.some(id=>downloaded.includes(id))&&<small role="status">Photo downloads requested. If your browser asks, allow multiple downloads. Look in Downloads or Files.</small>}
+    {selected.length>0&&<PhotoHandoff recoveryOnly photos={job.photos} selected={selected} onSelect={setSelected} photoURL={id=>photoURL(id,true)} onContinue={()=>{}} onDownload={ids=>setDownloaded(previous=>[...new Set([...previous,...ids])])}/>}
     {text.trim()&&<details open={showReview} onToggle={e=>setShowReview(e.currentTarget.open)} className="original-review"><summary>See my review</summary><label>Your review<textarea aria-label="Your review" ref={textarea} readOnly value={text}/></label><small>You can use Back to return to the earlier steps.</small></details>}
     {selected.length>0&&<button className="quiet" onClick={()=>setStage('photos')}>Save photos again</button>}
    </div>
   </section>}
-  {stage!=='share'&&<button className="quiet full direct-options" disabled={recording||processing||!restored} onClick={()=>setStage('share')}>Go directly to review options</button>}
-  {text&&<div className="draft-notice"><small>{storageIssue?'Your browser could not save this draft. Copy it before leaving.':'Your draft is saved on this device for up to 30 days.'}</small></div>}
+  {text&&storageIssue&&<div className="draft-notice"><small>Your browser could not save this draft. Copy it before leaving.</small></div>}
   <footer className="footer">{job.links.yelp&&<a href={job.links.yelp} target="_blank" rel="noopener noreferrer" onClick={()=>track('click','yelp')}>Business information on Yelp</a>}{text&&<button className="quiet" disabled={recording||processing} onClick={clear}>Clear my draft</button>}</footer>
   <Toaster richColors/>
  </main>;
