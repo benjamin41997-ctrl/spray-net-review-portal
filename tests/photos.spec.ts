@@ -7,7 +7,10 @@ import {skipPhotoLabel} from '../src/PhotoHandoff';
 let admin:APIRequestContext;let job:any;let code:string;
 test.beforeAll(async()=>{({admin}=await login());});
 test.afterAll(async()=>{await admin.dispose();});
-test.beforeEach(async()=>{
+test.beforeEach(async({page})=>{
+ // Ordinary download tests cover browsers without a desktop save picker.
+ // Explicit picker tests install their own deterministic native-dialog stub.
+ await page.addInitScript(()=>Object.defineProperty(window,'showSaveFilePicker',{value:undefined,configurable:true}));
  job=await(await admin.post('/api/admin/jobs',{data:{...fixture,source:'training',links:{}}})).json();
  for(const [kind,label,background] of [['before','Before cabinets','#ed2222'],['after','Finished cabinets','#2222ed'],['detail','Optional detail','#22ed22']]){
   const buffer=await sharp({create:{width:400,height:300,channels:3,background}}).png().toBuffer();
@@ -53,6 +56,53 @@ test('saving all photos again requests a fresh set after Back and Save photos ag
  await page.getByRole('button',{name:'Save photos again',exact:true}).click();await expect(save).toBeEnabled();
  await save.click();await expect.poll(()=>downloads.length).toBe(9);
  expect(downloads.map(d=>d.suggestedFilename())).toEqual(Array(3).fill(['Spray-Net-before-01.jpg','Spray-Net-after-02.jpg','Spray-Net-detail-03.jpg']).flat());
+});
+
+test.describe('downloads rejected by the browser',()=>{
+ test.use({acceptDownloads:false});
+ test('a rejected batch does not suppress a new request after returning to Photos',async({page})=>{
+  await page.addInitScript(()=>{
+   (window as any).requestedDownloads=[];const click=HTMLAnchorElement.prototype.click;
+   HTMLAnchorElement.prototype.click=function(){if(this.download)(window as any).requestedDownloads.push({name:this.download,url:this.href});click.call(this);};
+  });
+  const downloads:Download[]=[];page.on('download',d=>downloads.push(d));await photos(page);
+  const save=page.getByRole('button',{name:'Save and share all photos',exact:true});
+  await save.click();expect(await page.evaluate(()=>(window as any).requestedDownloads.length)).toBe(3);await expect.poll(()=>downloads.length).toBeGreaterThan(0);
+  for(const d of downloads)expect(await d.failure()).toBeTruthy();
+  await page.getByRole('button',{name:'Back',exact:true}).click();await expect(save).toBeEnabled();
+  await save.click();const requests=await page.evaluate(()=>(window as any).requestedDownloads);expect(requests).toHaveLength(6);expect(new Set(requests.map((r:any)=>r.url)).size).toBe(6);
+  await expect(page.getByRole('heading',{name:'Ready to share',exact:true})).toBeVisible();
+ });
+});
+
+async function desktopPicker(page:any){
+ await page.addInitScript(()=>{
+  const media=window.matchMedia.bind(window);window.matchMedia=query=>query==='(pointer: fine)'?{...media(query),matches:true} as MediaQueryList:media(query);
+  const state={cancel:true,failWrite:false,picks:[] as string[],writes:[] as {name:string,size:number,type:string}[],closed:[] as string[],aborted:[] as string[]};(window as any).saveQA=state;
+  Object.defineProperty(window,'showSaveFilePicker',{configurable:true,value:async({suggestedName:name}:{suggestedName:string})=>{
+   state.picks.push(name);if(state.cancel)throw new DOMException('Canceled','AbortError');
+   return {createWritable:async()=>({write:async(file:File)=>{if(state.failWrite)throw Error('Disk write failed');state.writes.push({name,size:file.size,type:file.type});},close:async()=>{state.closed.push(name);},abort:async()=>{state.aborted.push(name);}})};
+  }});
+ });
+}
+
+test('desktop cancel on a retry stops the batch and the next tap opens a fresh save picker',async({page})=>{
+ await desktopPicker(page);const downloads:Download[]=[];page.on('download',d=>downloads.push(d));await photos(page);
+ const save=page.getByRole('button',{name:'Save and share all photos',exact:true});await save.click();await expect.poll(()=>downloads.length).toBe(3);
+ await page.getByRole('button',{name:'Back',exact:true}).click();await save.click();
+ await expect(page.getByRole('status')).toContainText('Saving canceled. You can try again.');await expect(save).toBeEnabled();
+ expect(await page.evaluate(()=>(window as any).saveQA)).toMatchObject({picks:['Spray-Net-before-01.jpg'],writes:[],closed:[]});
+ await page.evaluate(()=>{(window as any).saveQA.cancel=false;});await save.click();
+ await expect(page.getByRole('heading',{name:'Ready to share',exact:true})).toBeVisible();
+ const state=await page.evaluate(()=>(window as any).saveQA);expect(state.picks).toEqual(['Spray-Net-before-01.jpg','Spray-Net-before-01.jpg','Spray-Net-after-02.jpg','Spray-Net-detail-03.jpg']);
+ expect(state.closed).toEqual(['Spray-Net-before-01.jpg','Spray-Net-after-02.jpg','Spray-Net-detail-03.jpg']);expect(state.writes).toHaveLength(3);expect(state.writes.every((file:any)=>file.size>0&&file.type==='image/jpeg')).toBe(true);expect(downloads).toHaveLength(3);
+});
+
+test('a desktop write failure keeps the retry available and never advances as saved',async({page})=>{
+ await desktopPicker(page);await photos(page);const save=page.getByRole('button',{name:'Save and share all photos',exact:true});await save.click();await page.getByRole('button',{name:'Back',exact:true}).click();
+ await page.evaluate(()=>{(window as any).saveQA.cancel=false;(window as any).saveQA.failWrite=true;});await save.click();
+ await expect(page.getByRole('status')).toContainText('The photos could not be saved.');await expect(save).toBeEnabled();await expect(page.getByRole('heading',{name:'Add your project photos',exact:true})).toBeVisible();
+ expect(await page.evaluate(()=>(window as any).saveQA)).toMatchObject({closed:[],aborted:['Spray-Net-before-01.jpg']});
 });
 
 test('opt-out still offers downloads for personal use and keeps photo inclusion off after reload',async({page})=>{

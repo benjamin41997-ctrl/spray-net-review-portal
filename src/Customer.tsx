@@ -135,7 +135,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
    <button className="full" disabled={!text.trim()||processing} onClick={()=>{setApproved(true);setStage(job.photos.length?'photos':'share');}}>Next<ArrowRight/></button>
   </section>}
   {stage==='photos'&&<>
-   <PhotoHandoff photos={job.photos} selected={selected} onSelect={ids=>{setSelected(ids);setPhotoChoiceMade(true);}} photoURL={id=>photoURL(id,true)} onContinue={()=>setStage('share')} onDownload={ids=>setDownloaded(previous=>[...new Set([...previous,...ids])])}/>
+   <PhotoHandoff photos={job.photos} selected={selected} retryDownloads={downloaded.length>0} onSelect={ids=>{setSelected(ids);setPhotoChoiceMade(true);}} photoURL={id=>photoURL(id,true)} onContinue={()=>setStage('share')} onDownload={ids=>setDownloaded(previous=>[...new Set([...previous,...ids])])}/>
   </>}
   {stage==='share'&&<section className="panel stack" id="destinations">
    {!destinations.length&&<div className="notice">Review links haven’t been added yet. Your draft stays here.</div>}
