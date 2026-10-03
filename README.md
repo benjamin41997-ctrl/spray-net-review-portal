@@ -118,9 +118,9 @@ The real supplied link was opened read-only in the available signed-in browser a
 
 ## Customer photo handoff
 
-The Photos step initially has exactly three choices: **Share all photos**, **Select which photos to include**, and **Don't share my photos, I don't want neighbors to be envious**. Supplied images are visible without selection checkboxes until the customer chooses the selection option.
+The Photos step initially has exactly three choices: **Save and share all photos**, **Select photos to include and save**, and **Don't share my photos, I don't want neighbors to be jealous…**. Supplied images are visible without selection checkboxes until the customer chooses the selection option.
 
-**Share all photos** requests downloads of every supplied image as a separate JPEG directly from the customer's tap. It uses browser downloads rather than the phone share menu, a ZIP archive, or an automatic upload to Google. Files are fetched and prepared before the tap; the button waits until all photos are ready. **Select which photos to include** reveals checkboxes and downloads only the chosen images. Both all-photo and selected-photo download requests move directly to **Ready to share**, with the selected count in the Google instructions. There is no intermediate downloaded-photos screen.
+**Save and share all photos** requests downloads of every supplied image as a separate JPEG directly from the customer's tap. It uses browser downloads rather than the phone share menu, a ZIP archive, or an automatic upload to Google. Files are fetched and prepared before the tap; the button waits until all photos are ready. **Select photos to include and save** reveals checkboxes and downloads only the chosen images. Both all-photo and selected-photo download requests move directly to **Ready to share**, with the selected count in the Google instructions. There is no intermediate downloaded-photos screen.
 
 The opt-out deselects the photos for review inclusion and shows **Download photos for myself** alongside Next. Personal downloads do not reselect photos for the review. Customers can continue without downloading anything. The opt-out and individual selections survive reload and returning from Google.
 

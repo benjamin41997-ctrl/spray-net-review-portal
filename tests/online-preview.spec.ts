@@ -18,7 +18,7 @@ test('unconnected Pages preview supports drafts and real photo downloads without
  await page.getByRole('button',{name:'Next',exact:true}).click();
  const downloads:any[]=[];page.on('download',file=>downloads.push(file));
  await expect(page.locator('.photo-card img')).toHaveCount(2);
- await page.getByRole('button',{name:'Share all photos',exact:true}).click();
+ await page.getByRole('button',{name:'Save and share all photos',exact:true}).click();
  await expect.poll(()=>downloads.length).toBe(2);expect(downloads.map(d=>d.suggestedFilename())).toEqual(['Spray-Net-before-01.jpg','Spray-Net-after-02.jpg']);
  await expect(page.getByRole('heading',{name:'Ready to share',exact:true})).toBeVisible();
  await expect(page.getByText('Import the 2 transformation photos you already downloaded.')).toBeVisible();

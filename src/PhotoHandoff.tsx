@@ -9,7 +9,7 @@ import SecurePhoto from './SecurePhoto';
 type Photo={id:string;kind:string;label:string};
 type Prepared={key:string;files:Record<string,File>;failed:string[]};
 type Mode='choices'|'select'|'skip';
-export const skipPhotoLabel="Don't share my photos, I don't want neighbors to be envious";
+export const skipPhotoLabel="Don't share my photos, I don't want neighbors to be jealous…";
 export default function PhotoHandoff({photos,selected,onSelect,photoURL,onContinue,onDownload,recoveryOnly=false}:{photos:Photo[];selected:string[];onSelect:(ids:string[])=>void;photoURL:(id:string)=>string;onContinue:()=>void;onDownload:(ids:string[])=>void;recoveryOnly?:boolean}){
  const [mode,setMode]=useState<Mode>(selected.length===0?'skip':'choices');
  const [prepared,setPrepared]=useState<Prepared|null>(null);const [error,setError]=useState('');const [status,setStatus]=useState('');const [retry,setRetry]=useState(0);const [requested,setRequested]=useState<string[]>([]);
@@ -47,8 +47,8 @@ export default function PhotoHandoff({photos,selected,onSelect,photoURL,onContin
   {(mode==='choices'||mode==='select')&&<div className="photo-grid">{photos.map(p=><figure className="photo-card" key={p.id}><SecurePhoto src={photoURL(p.id)} alt={p.label}/><span className="photo-type">{p.kind==='after'?'After':p.kind}</span>{mode==='select'?<label className="photo-caption"><Checkbox checked={selected.includes(p.id)} aria-label={`Select ${p.label}`} onCheckedChange={v=>onSelect(v===true?[...selected,p.id]:selected.filter(id=>id!==p.id))}/>{p.label}</label>:<figcaption className="photo-caption">{p.label}</figcaption>}</figure>)}</div>}
   {preparationStatus}
   {mode==='choices'&&<div className="stack photo-choices">
-   <button className="full" disabled={!available(photos.map(p=>p.id))} onClick={()=>download(photos.map(p=>p.id))}><Download/>Share all photos</button>
-   <button className="secondary full" onClick={()=>setMode('select')}>Select which photos to include</button>
+   <button className="full" disabled={!available(photos.map(p=>p.id))} onClick={()=>download(photos.map(p=>p.id))}><Download/>Save and share all photos</button>
+   <button className="secondary full" onClick={()=>setMode('select')}>Select photos to include and save</button>
    <button className="quiet full" onClick={skip}>{skipPhotoLabel}</button>
   </div>}
   {mode==='select'&&<div className="stack">
