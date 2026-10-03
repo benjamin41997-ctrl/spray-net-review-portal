@@ -12,4 +12,5 @@ export interface Env {
  TRANSCRIPTION_MODEL?: string;
  REVIEW_EDITOR_MODEL?: string;
  ENABLE_AI_CLEANUP?: string;
+ PREVIEW_QR_TOKEN?: string;
 }

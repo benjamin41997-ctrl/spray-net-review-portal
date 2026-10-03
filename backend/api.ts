@@ -6,6 +6,12 @@ import {reviewEditingInstructions,transcriptionInstructions} from './review-edit
 function json(v:unknown,status=200){return Response.json(v,{status,headers:{'Cache-Control':'no-store','Referrer-Policy':'no-referrer'}});}
 export async function handle(r:Request,env:Env){const {db,bucket,requireAdmin,sameOrigin,body,clean,links,token,getJob,resolveQR,publicJob,settings,rate,event}=createPortal(env,r);try{const p=new URL(r.url).pathname.split('/').filter(Boolean).slice(1);const method=r.method;
  if(method!=='GET')sameOrigin(r);
+ if(p[0]==='preview'&&p.length===1&&method==='GET'){
+  if(!env.PREVIEW_QR_TOKEN)throw new HttpError(503,'Online AI preview is not connected yet.');
+  const {job}=await resolveQR(env.PREVIEW_QR_TOKEN);
+  if(!job.demo)throw new HttpError(503,'Online AI preview is unavailable.');
+  return json({token:env.PREVIEW_QR_TOKEN,settings:{transcription:settings().transcription,cleanup:settings().cleanup}});
+ }
  if(p[0]==='admin'){
   await requireAdmin();const now=new Date().toISOString();
   if(p[1]==='session'&&method==='GET')return json({allowed:true});
@@ -55,7 +61,7 @@ export async function handle(r:Request,env:Env){const {db,bucket,requireAdmin,sa
   if(p[2]==='cleanup'&&method==='POST'){
    if(!settings().cleanup)throw new HttpError(403,'Optional AI editing is disabled.');
    const b=await body(r);const text=clean(b.text,8000);
-   await rate(`cleanup:${t}`,5);await rate('cleanup:global',100);
+   await rate(`cleanup:${t}`,job.demo&&env.PREVIEW_QR_TOKEN===t?25:5);await rate('cleanup:global',100);
    const model=env.REVIEW_EDITOR_MODEL||'gpt-6.1-sol';
    const res=await fetch('https://api.openai.com/v1/responses',{
     method:'POST',headers:{Authorization:`Bearer ${env.OPENAI_API_KEY}`,'Content-Type':'application/json'},

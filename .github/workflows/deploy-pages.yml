@@ -30,13 +30,18 @@ jobs:
           cache: npm
       - run: npm ci --no-audit --no-fund
       - run: |
-          if [ "$REQUIRE_CONNECTED" = "true" ] || [ -n "$REVIEW_API_BASE_URL" ]; then
+          if [ "$REQUIRE_CONNECTED" = "true" ]; then
+            node scripts/configure-pages.mjs --require-connected
+          elif [ "$PREVIEW_API_ONLY" = "true" ]; then
+            node scripts/configure-pages.mjs --require-preview-api
+          elif [ -n "$REVIEW_API_BASE_URL" ]; then
             node scripts/configure-pages.mjs --require-connected
           else
             node scripts/configure-pages.mjs
           fi
         env:
           REQUIRE_CONNECTED: ${{ inputs.connected }}
+          PREVIEW_API_ONLY: ${{ vars.REVIEW_PREVIEW_API_ONLY }}
           REVIEW_API_BASE_URL: ${{ vars.REVIEW_API_BASE_URL }}
           REVIEW_PORTAL_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
           REVIEW_SUPABASE_URL: ${{ vars.REVIEW_SUPABASE_URL }}

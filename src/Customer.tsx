@@ -26,7 +26,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
  const recordingBase=useRef('');const liveDraft=useRef({text,autoFormat});liveDraft.current={text,autoFormat};
  const recordingTimer=useRef<ReturnType<typeof setInterval>|null>(null);const limitTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
  const textarea=useRef<HTMLTextAreaElement>(null);const heading=useRef<HTMLHeadingElement>(null);
- const key=`spraynet-review:v1:${token}`;const base=`customer/${token}`;
+ const key=`spraynet-review:v1:${staticDemo?'public-demo':token}`;const base=`customer/${token}`;
  const photoURL=(id:string,download=false)=>staticDemo?assetURL(`sample/${id}.webp`):remotePhotoURL(jobPreview?`admin/photos/${id}`:`${base}/photo/${id}`,{preview,download});
  function update(v:string){setText(v);setApproved(false);setEditingError('');}
  async function track(type:string,platform?:string){
@@ -102,7 +102,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
  const editor=<label>Your review<textarea aria-label="Your review" ref={textarea} disabled={!restored||recording||processing} maxLength={8000} value={text} onChange={e=>update(e.target.value)} placeholder="Write in your own words…"/></label>;
  return <main className="customer-shell guided">
   {admin&&<div className="actions"><a className="text-link" href={adminLink({assign:token})}>Manage this sticker</a></div>}
-  {staticDemo?<div className="notice"><strong>Online preview · sample project</strong><details><summary>Preview details</summary><p>Try typing and downloading sample photos. AI, recorded voice transcription, and admin access need the hosted backend. Google posting is disabled; your draft stays on this device. These are Spray-Net network sample photos, not a South Charlotte customer job.</p></details></div>:preview&&<div className="notice">Administrator preview · activity is not counted.</div>}
+  {staticDemo?<div className="notice"><strong>Online preview · sample project</strong><details><summary>Preview details</summary><p>Try typing and downloading sample photos. {capabilities.cleanup?'AI formatting is connected for testing.':'AI formatting is not connected yet.'} {capabilities.transcription?'Recorded voice transcription is connected for testing.':'Recorded voice transcription is not connected yet; use your keyboard’s microphone instead.'} Admin setup is still pending. Google posting is disabled; your draft stays on this device. These are Spray-Net network sample photos, not a South Charlotte customer job.</p></details></div>:preview&&<div className="notice">Administrator preview · activity is not counted.</div>}
   {job.demo&&!staticDemo&&<div className="notice demo-notice">Sample project · please don’t submit sample feedback to a real listing.</div>}
   <header className="brand"><img src={assetURL('branding/logo.png')} alt="Spray-Net"/><p className="eyebrow">SOUTH CHARLOTTE</p></header>
   {stage!=='welcome'&&<><button className="quiet back-button" disabled={recording||processing} onClick={back}><ArrowLeft/>Back</button><ol className="review-progress" aria-label="Review steps">{['Write','Check','Photos','Share'].map((label,i)=><li key={label} aria-current={i===progress?'step':undefined} className={i===progress?'current':i<progress?'complete':''}><span>{i+1}</span>{label}</li>)}</ol></>}
@@ -111,7 +111,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
   {stage==='welcome'&&<section className="panel stack entry-choices" aria-label="Get started">
    <button className="full" disabled={!restored} onClick={()=>{setMode('type');setStage('compose');}}><PenLine/>Type my review<ArrowRight/></button>
    <button className="secondary full" disabled={!restored} onClick={()=>{setMode('voice');setStage('compose');}}><Mic/>Speak my review<ArrowRight/></button>
-   <small>We’ll help tidy your wording. You approve every word.</small>
+   <small>{capabilities.cleanup?'We’ll help tidy your wording. You approve every word.':'AI formatting isn’t connected yet. You can type and try the photo flow; your wording will stay unchanged.'}</small>
   </section>}
   {stage==='compose'&&!processing&&<section className="panel stack">
    <p>Tell us about your experience in your own words.</p>
@@ -119,8 +119,8 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
    {editor}
    {mode==='type'&&<button className="quiet" onClick={()=>setMode('voice')}><Mic/>Speak instead</button>}
    {recordingControls}
-   <label className="selection-label"><Checkbox checked={autoFormat} onCheckedChange={v=>setAutoFormat(v===true)} disabled={processing||recording}/>Automatically format my review</label>
-   <small>{capabilities.cleanup?`We’ll improve spelling, grammar, sentence flow, and formatting ${mode==='voice'?'after recording or when you tap Next':'when you tap Next'}, keeping your meaning. Uncheck to keep your wording unchanged.`:'AI formatting isn’t connected yet. You can continue and check your wording yourself.'}</small>
+   {capabilities.cleanup&&<label className="selection-label"><Checkbox checked={autoFormat} onCheckedChange={v=>setAutoFormat(v===true)} disabled={processing||recording}/>Automatically format my review</label>}
+   <small>{capabilities.cleanup?`We’ll improve spelling, grammar, sentence flow, and formatting ${mode==='voice'?'after recording or when you tap Next':'when you tap Next'}, keeping your meaning. Uncheck to keep your wording unchanged.`:'AI formatting isn’t connected yet. Next will keep your words unchanged so you can check them yourself.'}</small>
    <button className="full" disabled={!text.trim()||processing||recording} onClick={()=>check()}>{processing?<Loader2/>:<ArrowRight/>}{processing?'Preparing your review…':'Next'}</button>
   </section>}
   {stage==='check'&&!processing&&<section className="panel stack">

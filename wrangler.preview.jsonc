@@ -10,10 +10,9 @@
   "ENVIRONMENT":"production",
   "PUBLIC_PORTAL_URL":"https://benjamin41997-ctrl.github.io/spray-net-review-portal/",
   "ALLOWED_ORIGINS":"https://benjamin41997-ctrl.github.io",
-  "ENABLE_AI_CLEANUP":"false",
+  "ENABLE_AI_CLEANUP":"true",
   "TRANSCRIPTION_MODEL":"gpt-transcribe",
-  "REVIEW_EDITOR_MODEL":"gpt-6.1-sol"
+  "REVIEW_EDITOR_MODEL":"gpt-6-luna"
  },
- "d1_databases":[{"binding":"DB","database_name":"spray-net-reviews","database_id":"38d8f2cf-b38a-4441-b3fd-4a14fe3c78f8","migrations_dir":"drizzle"}],
- "r2_buckets":[{"binding":"BUCKET","bucket_name":"spray-net-review-photos"}]
+ "d1_databases":[{"binding":"DB","database_name":"spray-net-reviews","database_id":"38d8f2cf-b38a-4441-b3fd-4a14fe3c78f8","migrations_dir":"drizzle"}]
 }
