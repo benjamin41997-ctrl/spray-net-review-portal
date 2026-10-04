@@ -30,9 +30,8 @@ export default function ReviewHandoff({platform,url,text,approved,photoCount,inc
    <li>{failed?'Copy the selected review below, then press “Continue to Google”.':'Press “Paste my review to Google” below.'}</li>
    <li>Sign in to Google if prompted.</li>
    <li>{failed?'Paste the review you copied.':'Paste your review. It is automatically copied for you.'}</li>
-   <li>{includePhotos?'Attach the transformation pictures you downloaded.':'You can post without photos.'}</li>
-   <li>{includePhotos?`Import the ${photoCount} transformation photo${photoCount===1?'':'s'} you already downloaded.`:'Choose your rating.'}</li>
-   <li>{includePhotos?'Confirm everything looks correct, choose your rating, and press “Post”.':'Confirm everything looks correct and press “Post”.'}</li>
+   <li>{includePhotos?`Attach the ${photoCount} transformation photo${photoCount===1?'':'s'} you already downloaded.`:'You can post without photos.'}</li>
+   <li>Confirm everything looks correct, choose your rating, and press “Post”.</li>
   </ol>}
   {platform!=='google'&&approved&&!!text.trim()&&<small>{failed?`Copy the selected review below, then press “Continue to ${name}”.`:`Your review will be copied for you. Paste it on ${name}, then complete the steps there to post it.`}</small>}
   <button className="full" disabled={!approved||!text.trim()||busy} onClick={open}>{busy?<Loader2/>:<Copy/>}{busy?(failed?`Opening ${name}…`:`Copying and opening ${name}…`):failed?`Continue to ${name}`:`Paste my review to ${name}`}</button>
