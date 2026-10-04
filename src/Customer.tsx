@@ -150,9 +150,8 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
    </div>)}
    <div className="share-extras">
     {selected.some(id=>downloaded.includes(id))&&<small role="status">Photo downloads requested. If your browser asks, allow multiple downloads. Look in Downloads or Files.</small>}
-    {selected.length>0&&<PhotoHandoff recoveryOnly photos={job.photos} selected={selected} onSelect={setSelected} photoURL={id=>photoURL(id,true)} onContinue={()=>{}} onDownload={ids=>setDownloaded(previous=>[...new Set([...previous,...ids])])}/>}
-    {text.trim()&&<details open={showReview} onToggle={e=>setShowReview(e.currentTarget.open)} className="original-review"><summary>See my review</summary><label>Your review<textarea aria-label="Your review" ref={textarea} readOnly value={text}/></label><small>You can use Back to return to the earlier steps.</small></details>}
     {selected.length>0&&<button className="quiet" onClick={()=>setStage('photos')}>Save photos again</button>}
+    {text.trim()&&<details open={showReview} onToggle={e=>setShowReview(e.currentTarget.open)} className="original-review"><summary>See my review</summary><label>Your review<textarea aria-label="Your review" ref={textarea} readOnly value={text}/></label><small>You can use Back to return to the earlier steps.</small></details>}
    </div>
   </section>}
   {text&&storageIssue&&<div className="draft-notice"><small>Your browser could not save this draft. Copy it before leaving.</small></div>}

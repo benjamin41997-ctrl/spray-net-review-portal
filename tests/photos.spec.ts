@@ -115,7 +115,7 @@ test('opt-out still offers downloads for personal use and keeps photo inclusion 
 });
 
 test('individual download fallback is available when a browser blocks batch downloads',async({page})=>{
- await photos(page);await page.getByRole('button',{name:'Save and share all photos',exact:true}).click();await page.getByText('Download didn’t start?',{exact:true}).click();
+ await photos(page);await page.getByRole('button',{name:skipPhotoLabel,exact:true}).click();await page.getByRole('button',{name:'Download photos for myself',exact:true}).click();await page.getByText('Download didn’t start?',{exact:true}).click();
  await expect(page.getByText('Your browser may block several downloads at once.',{exact:false})).toBeVisible();
  const d=page.waitForEvent('download');await page.getByRole('button',{name:'Download Before cabinets',exact:true}).click();expect((await d).suggestedFilename()).toBe('Spray-Net-before-01.jpg');
  await expect(page.getByRole('status')).toContainText('downloads requested');
