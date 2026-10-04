@@ -5,6 +5,26 @@ let admin:APIRequestContext;let token:string;
 test.beforeAll(async()=>{({admin,token}=await login());});
 test.afterAll(async()=>{await admin.dispose();});
 
+test('custom customer greeting survives editing and archiving and appears on the same printed link',async({page,browser})=>{
+ let job=await(await admin.post('/api/admin/jobs',{data:{...fixture,internal_name:'Custom greeting QA'}})).json();
+ const greeting='Sam, the cabinets finally match your excellent taste! <High five>';
+ const customerContext=await browser.newContext({viewport:page.viewportSize()!});
+ try{
+  await admin.post('/api/admin/batch',{data:{count:1}});const dashboard=await(await admin.get('/api/admin/dashboard')).json();const code=dashboard.qrs.find((q:any)=>!q.assigned_at).token;
+  await admin.post('/api/admin/assign',{data:{token:code,job_id:job.id}});job=await(await patch(admin,job,'active')).json();
+  await browserAdmin(page,token);await page.goto(site+'?admin=1');await page.getByLabel('Find a project').fill('Custom greeting QA');
+  await page.locator('.project-row').getByRole('button',{name:'Open project',exact:true}).click();
+  const field=page.getByLabel('Customer greeting',{exact:true});await expect(field).toHaveValue(fixture.title);await expect(field).toHaveAttribute('maxlength','160');
+  await field.fill(greeting);await page.getByRole('button',{name:'Save changes',exact:true}).click();await expect(page.getByRole('button',{name:'Save changes',exact:true})).toBeDisabled();
+  const customer=await customerContext.newPage();await customer.goto(site+'?code='+code);await expect(customer.getByRole('heading',{name:greeting,exact:true})).toBeVisible();await expect(customer.locator('high')).toHaveCount(0);
+  await page.reload();await page.getByLabel('Find a project').fill('Custom greeting QA');await page.locator('.project-row').getByRole('button',{name:'Open project',exact:true}).click();await expect(field).toHaveValue(greeting);
+  await page.getByLabel('Project label (private)',{exact:true}).fill('Custom greeting QA updated');await page.getByRole('button',{name:'Save changes',exact:true}).click();await expect(page.getByRole('button',{name:'Save changes',exact:true})).toBeDisabled();await expect(field).toHaveValue(greeting);
+  await page.getByRole('button',{name:'Archive page',exact:true}).click();await page.getByRole('alertdialog').getByRole('button',{name:'Archive page',exact:true}).click();await expect(page.getByRole('alertdialog')).toHaveCount(0);await expect(field).toHaveValue(greeting);
+  expect((await(await admin.get('/api/admin/jobs/'+job.id)).json()).title).toBe(greeting);await customer.reload();await expect(customer.getByRole('heading',{name:'This page is no longer available.',exact:true})).toBeVisible();
+  await field.fill('   ');await page.getByRole('button',{name:'Activate page',exact:true}).click();await expect(field).toHaveValue('We loved working with you!');await customer.reload();await expect(customer.getByRole('heading',{name:'We loved working with you!',exact:true})).toBeVisible();await customer.close();
+ }finally{await customerContext.close();await admin.delete('/api/admin/jobs/'+job.id);}
+});
+
 test('new project has an opaque mobile dialog and only one required customer name',async({page})=>{
  await browserAdmin(page,token);await page.goto(site+'?admin=1');
  await page.getByRole('button',{name:'New project',exact:true}).click();
