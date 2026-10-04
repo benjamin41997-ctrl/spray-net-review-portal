@@ -62,6 +62,7 @@ export default function PhotoHandoff({photos,selected,onSelect,photoURL,onContin
  if(recoveryOnly)return recovery(selected);
  return <section className="panel stack" id="project-photos" aria-labelledby="photo-heading">
   <div><h2 id="photo-heading">Your project photos</h2><small>Project photos supplied by Spray-Net.</small></div>
+  <small>For your privacy, we remove hidden metadata from uploaded photos, including location and camera details.</small>
   {(mode==='choices'||mode==='select')&&<div className="photo-grid">{photos.map(p=><figure className="photo-card" key={p.id}><SecurePhoto src={photoURL(p.id)} alt={p.label}/><span className="photo-type">{p.kind==='after'?'After':p.kind}</span>{mode==='select'?<label className="photo-caption"><Checkbox checked={selected.includes(p.id)} aria-label={`Select ${p.label}`} onCheckedChange={v=>onSelect(v===true?[...selected,p.id]:selected.filter(id=>id!==p.id))}/>{p.label}</label>:<figcaption className="photo-caption">{p.label}</figcaption>}</figure>)}</div>}
   {preparationStatus}
   {mode==='choices'&&<div className="stack photo-choices">
