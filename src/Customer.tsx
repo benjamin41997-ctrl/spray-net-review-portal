@@ -139,9 +139,9 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
   </>}
   {stage==='share'&&<section className="panel stack" id="destinations">
    {!destinations.length&&<div className="notice">Review links haven’t been added yet. Your draft stays here.</div>}
-   {destinations.map((p,i)=><div className="destination" key={p}>
+   {destinations.map((p,i)=><div className="destination" data-platform={p} key={p}>
     <div className="destination-heading"><h2>{platformNames[p]}</h2>{i===0&&destinations.length>1&&<span className="badge">Start here</span>}</div>
-    {p==='google'?<GoogleHandoff url={job.links[p]} text={text} approved={approved} photoCount={selected.length} includePhotos={selected.length>0} saveDraft={saveDraft} previewOnly={staticDemo} onContinue={()=>track('click',p)} onManualCopy={()=>{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});}}/>:<><small>{p==='apple'?'Apple Maps offers ratings and photos where available.':'Copy your review, then paste it and attach any saved photos on the next page.'}</small>{approved&&p!=='apple'&&<button className="secondary full" onClick={async()=>{try{await navigator.clipboard.writeText(text);toast.success('Review copied.');}catch{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});toast('Copy the selected text using your phone’s menu.');}}}>Copy review</button>}<a className="button full" href={job.links[p]} target="_blank" rel="noopener noreferrer" onClick={()=>{saveDraft();void track('click',p);}}>Continue to {platformNames[p]}</a></>}
+    {p==='google'?<GoogleHandoff url={job.links[p]} text={text} approved={approved} photoCount={selected.length} includePhotos={selected.length>0} saveDraft={saveDraft} previewOnly={staticDemo} onContinue={()=>track('click',p)} onManualCopy={()=>{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});}}/>:<><small>{p==='yelp'?'View Spray-Net South Charlotte’s business page on Yelp.':'Copy your review, then paste it and attach any saved photos on the next page.'}</small>{approved&&<button className="secondary full" onClick={async()=>{try{await navigator.clipboard.writeText(text);toast.success('Review copied.');}catch{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});toast('Copy the selected text using your phone’s menu.');}}}>Copy review</button>}<a className="button full" href={job.links[p]} target="_blank" rel="noopener noreferrer" onClick={()=>{saveDraft();void track('click',p);}}>{p==='yelp'?'Open Yelp business page':`Continue to ${platformNames[p]}`}</a></>}
    </div>)}
    <div className="share-extras">
     {selected.some(id=>downloaded.includes(id))&&<small role="status">Photo downloads requested. If your browser asks, allow multiple downloads. Look in Downloads or Files.</small>}
@@ -151,7 +151,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
    </div>
   </section>}
   {text&&storageIssue&&<div className="draft-notice"><small>Your browser could not save this draft. Copy it before leaving.</small></div>}
-  <footer className="footer">{job.links.yelp&&<a href={job.links.yelp} target="_blank" rel="noopener noreferrer" onClick={()=>track('click','yelp')}>Business information on Yelp</a>}{text&&<button className="quiet" disabled={recording||processing} onClick={clear}>Clear my draft</button>}</footer>
+  <footer className="footer">{text&&<button className="quiet" disabled={recording||processing} onClick={clear}>Clear my draft</button>}</footer>
   <Toaster richColors/>
  </main>;
 }

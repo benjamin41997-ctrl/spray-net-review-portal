@@ -21,7 +21,7 @@ test('review source toggles store business links, support Google opt-out, persis
  const popupEvent=page.waitForEvent('popup');await page.getByRole('link',{name:'Preview project layout'}).click();const customer=await popupEvent;
  await startDraft(customer);await customer.getByLabel('Your review',{exact:true}).fill('The finished cabinets look good.');await approveReview(customer);
  await expect(customer.getByRole('link',{name:'Continue to Angi',exact:true})).toHaveAttribute('href',businessReviewLinks.angi);
- await expect(customer.getByRole('link',{name:'Business information on Yelp',exact:true})).toHaveAttribute('href',businessReviewLinks.yelp);
+ await expect(customer.getByRole('link',{name:'Open Yelp business page',exact:true})).toHaveAttribute('href',businessReviewLinks.yelp);
  await expect(customer.getByRole('button',{name:'Paste my review to Google',exact:true})).toHaveCount(0);await expect(customer.getByRole('link',{name:'Continue to Thumbtack',exact:true})).toHaveCount(0);await expect(customer.getByRole('link',{name:'Continue to Yelp',exact:true})).toHaveCount(0);await expect(customer.getByText('Apple Maps',{exact:true})).toHaveCount(0);await customer.close();
  await page.getByRole('button',{name:'New project',exact:true}).click();dialog=page.getByRole('dialog',{name:'New customer project'});
  await expect(dialog.getByRole('switch',{name:'Google',exact:true})).toBeChecked();for(const name of ['Angi','Thumbtack','Yelp'])await expect(dialog.getByRole('switch',{name,exact:true})).not.toBeChecked();
