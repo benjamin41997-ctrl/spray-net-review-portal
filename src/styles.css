@@ -2,8 +2,9 @@
 @import "tw-animate-css";
 @import "../vendor/shadcn-tailwind-4.13.0.css";
 
-.completion-list>div{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;flex-wrap:wrap}
-.completion-list span{font-size:.875rem;color:var(--muted-foreground)}
+.handoff-result{display:flex;align-items:center;justify-content:space-between;gap:.75rem}
+.handoff-result>strong{color:#28543c;white-space:nowrap}
+.handoff-result>button,.handoff-result>.button{flex:1;min-width:0}
 @theme inline {
  --color-background:var(--background);--color-foreground:var(--foreground);
  --color-card:var(--card);--color-card-foreground:var(--card-foreground);

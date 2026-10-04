@@ -32,9 +32,9 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
  const key=`spraynet-review:v1:${staticDemo?'public-demo':token}`;const base=`customer/${token}`;
  const photoURL=(id:string,download=false)=>staticDemo?assetURL(`sample/${id}.webp`):remotePhotoURL(jobPreview?`admin/photos/${id}`:`${base}/photo/${id}`,{preview,download});
  function update(v:string){setText(v);setApproved(false);setEditingError('');}
- async function track(type:string,platform?:string){
+ async function track(type:'visit'|'click',platform?:string){
   if(preview)return;
-  try{let id:string=crypto.randomUUID();if(type==='reported'){try{const k=key+':confirmation:'+platform;id=localStorage.getItem(k)||id;localStorage.setItem(k,id);}catch{}}
+  try{const id=crypto.randomUUID();
    await api(`${base}/event`,{method:'POST',keepalive:true,body:JSON.stringify({id,type,platform})});
   }catch{/* Activity reporting must never prevent sharing. */}
  }
@@ -50,8 +50,8 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
    setDownloaded((Array.isArray(v.downloaded)?v.downloaded:[]).filter((id:string)=>job.photos.some(p=>p.id===id)));setMode(v.mode==='voice'?'voice':'type');setAutoFormat(v.autoFormat!==false);
    const saved:Stage=stages.includes(v.stage)?v.stage:draft?'compose':'welcome';
    const enabled=orderedPlatforms(job.source,job.links);
-   const complete=enabled.length>0&&enabled.every(p=>restoredHandoffs[p]==='reported');
-   setStage(blocked||(['photos','share','thanks'].includes(saved)&&!v.approved)?'check':saved==='thanks'&&!complete?'share':saved);
+   const complete=enabled.length>0&&enabled.every(p=>!!restoredHandoffs[p]);
+   setStage(blocked||(['photos','share','thanks'].includes(saved)&&!v.approved)?'check':saved==='thanks'&&!complete?'share':saved==='share'&&complete?'thanks':saved);
   }else localStorage.removeItem(key);}catch{setStorageIssue(true);}setRestored(true);
   try{if(!preview&&!sessionStorage.getItem(key+':visit')){void track('visit');sessionStorage.setItem(key+':visit','1');}}catch{void track('visit');}
   const context=(document as any).modelContext;const lifecycle=new AbortController();
@@ -104,13 +104,14 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
  function back(){if(stage==='compose')setStage('welcome');else if(stage==='check')setStage('compose');else if(stage==='photos')setStage('check');else if(stage==='share')setStage(approved&&job.photos.length?'photos':text?'check':'welcome');else if(stage==='thanks')setStage('share');}
  function clear(){update('');setOriginal('');setAiEdited(false);setNeedsDetail(false);setHandoffs({});setSelected(job.photos.map(p=>p.id));setDownloaded([]);setPhotoChoiceMade(false);setAutoFormat(true);setAudio(null);setStage('welcome');toast('Draft cleared on this device.');}
  const destinations=orderedPlatforms(job.source,job.links);
- const nextDestination=destinations.find(p=>handoffs[p]!=='reported');
- function opened(platform:string){setHandoffs(previous=>({...previous,[platform]:previous[platform]==='reported'?'reported':'opened'}));return track('click',platform);}
- function report(platform:string){
-  if(!approved||handoffs[platform]!=='opened'||!destinations.includes(platform))return;
-  const updated={...handoffs,[platform]:'reported' as const};setHandoffs(updated);void track('reported',platform);
-  if(destinations.length>0&&destinations.every(p=>updated[p]==='reported'))setStage('thanks');
+ const nextDestination=destinations.find(p=>!handoffs[p]);
+ function opened(platform:string){
+  const updated={...handoffs,[platform]:handoffs[platform]==='reported'?'reported' as const:'opened' as const};setHandoffs(updated);
+  if(destinations.length>0&&destinations.every(p=>!!updated[p]))setStage('thanks');
+  return track('click',platform);
  }
+ function handoff(p:string){return p==='google'||p==='angi'||p==='thumbtack'?<ReviewHandoff platform={p} url={job.links[p]} text={text} approved={approved} photoCount={selected.length} includePhotos={selected.length>0} saveDraft={saveDraft} previewOnly={staticDemo} progress={handoffs[p]} onContinue={()=>opened(p)} onManualCopy={()=>{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});}}/>:<div className="stack">{!handoffs[p]&&<small>View Spray-Net South Charlotte’s business page on Yelp.</small>}{approved&&<button className="secondary full" onClick={async()=>{try{await navigator.clipboard.writeText(text);toast.success('Review copied.');}catch{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});toast('Copy the selected text using your phone’s menu.');}}}>Copy review</button>}<div className={handoffs[p]?'handoff-result':'stack'}>{handoffs[p]&&<strong role="status">Thank you!</strong>}<a className={handoffs[p]?'button secondary':'button full'} href={job.links[p]} target="_blank" rel="noopener noreferrer" onClick={()=>{saveDraft();void opened(p);}}>{handoffs[p]?'Something went wrong? Try again':'Open Yelp business page'}</a></div></div>;}
+ const reviewDetails=text.trim()&&<details open={showReview} onToggle={e=>setShowReview(e.currentTarget.open)} className="original-review"><summary>See my review</summary><label>Your review<textarea aria-label="Your review" ref={textarea} readOnly value={text}/></label><small>You can use Back to return to the earlier steps.</small></details>;
  const titles:Record<Stage,string>={welcome:publicGreeting(job.title),compose:mode==='voice'?'Speak your review':'Type your review',check:'Check your review',photos:'Add your project photos',share:'Ready to share',thanks:'Thank you for sharing your experience!'};
  const progress=stage==='compose'?0:stage==='check'?1:stage==='photos'?2:stage==='thanks'?4:3;
  const shortReview=!!text.trim()&&text.trim().split(/\s+/).length<25;
@@ -157,20 +158,19 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
    {!destinations.length&&<div className="notice">Review links haven’t been added yet. Your draft stays here.</div>}
    {destinations.map(p=><div className="destination" data-platform={p} key={p}>
     <div className="destination-heading"><h2>{platformNames[p]}</h2>{p===nextDestination&&destinations.length>1&&<span className="badge">Start here</span>}</div>
-    {p==='google'||p==='angi'||p==='thumbtack'?<ReviewHandoff platform={p} url={job.links[p]} text={text} approved={approved} photoCount={selected.length} includePhotos={selected.length>0} saveDraft={saveDraft} previewOnly={staticDemo} progress={handoffs[p]} onReported={()=>report(p)} onContinue={()=>opened(p)} onManualCopy={()=>{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});}}/>:<div className="stack"><small>View Spray-Net South Charlotte’s business page on Yelp.</small>{handoffs[p]==='reported'&&<div className="notice success" role="status">Yelp review marked complete by you.</div>}{approved&&<button className="secondary full" onClick={async()=>{try{await navigator.clipboard.writeText(text);toast.success('Review copied.');}catch{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});toast('Copy the selected text using your phone’s menu.');}}}>Copy review</button>}<a className="button full" href={job.links[p]} target="_blank" rel="noopener noreferrer" onClick={()=>{saveDraft();void opened(p);}}>Open Yelp business page</a>{handoffs[p]==='opened'&&<><small>Yelp opens in another tab. Close that tab to return here. Posted your review?</small><button className="secondary full" onClick={()=>report(p)}>I posted my Yelp review</button></>}</div>}
+    {handoff(p)}
    </div>)}
    <div className="share-extras">
     {selected.some(id=>downloaded.includes(id))&&<small role="status">Photo downloads requested. If your browser asks, allow multiple downloads. Look in Downloads or Files.</small>}
     {selected.length>0&&<button className="quiet" onClick={()=>setStage('photos')}>Save photos again</button>}
-    {text.trim()&&<details open={showReview} onToggle={e=>setShowReview(e.currentTarget.open)} className="original-review"><summary>See my review</summary><label>Your review<textarea aria-label="Your review" ref={textarea} readOnly value={text}/></label><small>You can use Back to return to the earlier steps.</small></details>}
+    {reviewDetails}
    </div>
   </section>}
   {stage==='thanks'&&<section className="panel stack" aria-label="Review completion">
    <CheckCircle2 size={40} aria-hidden="true"/>
-   <p>You’ve confirmed completion on every review site selected for your project. We appreciate you taking the time to share honest feedback.</p>
-   <div className="stack completion-list" role="status">{destinations.map(p=><div key={p}><strong>{platformNames[p]}</strong><span>Confirmed by you</span></div>)}</div>
-   <small>Your confirmations are saved on this device. Publication hasn’t been independently verified.</small>
-   <button className="secondary full" onClick={()=>setStage('share')}>View review options</button>
+   <p>We appreciate you taking the time to share your experience. If something went wrong, you can try again below.</p>
+   {destinations.map(p=><div className="destination" data-platform={p} key={p}><h2>{platformNames[p]}</h2>{handoff(p)}</div>)}
+   <div className="share-extras">{selected.length>0&&<button className="quiet" onClick={()=>setStage('photos')}>Save photos again</button>}{reviewDetails}</div>
    <small>You’re all set. You can close this page.</small>
   </section>}
   {text&&storageIssue&&<div className="draft-notice"><small>Your browser could not save this draft. Copy it before leaving.</small></div>}

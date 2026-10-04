@@ -3,7 +3,7 @@ import {Copy,Loader2} from 'lucide-react';
 import {platformNames} from '@/lib/client';
 import {copyReviewText} from '@/lib/review-clipboard';
 
-export default function ReviewHandoff({platform,url,text,approved,photoCount,includePhotos,saveDraft,onContinue,onManualCopy,progress,onReported,previewOnly=false}:{platform:'google'|'angi'|'thumbtack';url:string;text:string;approved:boolean;photoCount:number;includePhotos:boolean;saveDraft:()=>void;onContinue:()=>Promise<void>;onManualCopy:()=>void;progress?:'opened'|'reported';onReported:()=>void;previewOnly?:boolean}){
+export default function ReviewHandoff({platform,url,text,approved,photoCount,includePhotos,saveDraft,onContinue,onManualCopy,progress,previewOnly=false}:{platform:'google'|'angi'|'thumbtack';url:string;text:string;approved:boolean;photoCount:number;includePhotos:boolean;saveDraft:()=>void;onContinue:()=>Promise<void>;onManualCopy:()=>void;progress?:'opened'|'reported';previewOnly?:boolean}){
  const name=platformNames[platform];
  const [busy,setBusy]=useState(false);
  const [failed,setFailed]=useState(false);
@@ -32,18 +32,19 @@ export default function ReviewHandoff({platform,url,text,approved,photoCount,inc
   try{tab.location.replace(url);void onContinue();}catch{tab.close();setTabBlocked(true);}
  }
  return <div className="stack">
-  {platform==='google'&&approved&&!!text.trim()&&progress!=='reported'&&<ol className="google-steps" aria-label="How to post your Google review">
+  {platform==='google'&&approved&&!!text.trim()&&(!progress||failed)&&<ol className="google-steps" aria-label="How to post your Google review">
    <li>{failed?'Copy the selected review below, then press “Continue to Google”.':'Press “Paste my review to Google” below.'}</li>
    <li>Sign in to Google if prompted.</li>
    <li>{failed?'Paste the review you copied.':'Paste your review. It is automatically copied for you.'}</li>
    <li>{includePhotos?`Attach the ${photoCount} transformation photo${photoCount===1?'':'s'} you already downloaded.`:'You can post without photos.'}</li>
    <li>Confirm everything looks correct, choose your rating, and press “Post”.</li>
   </ol>}
-  {platform!=='google'&&approved&&!!text.trim()&&progress!=='reported'&&<small>{failed?`Copy the selected review below, then press “Continue to ${name}”.`:`Your review will be copied for you. Paste it on ${name}, then complete the steps there to post it.`}</small>}
-  {progress==='reported'&&<div className="notice success" role="status">{name} review marked complete by you.</div>}
-  <button className={progress==='reported'?'secondary full':'full'} disabled={!approved||!text.trim()||busy} onClick={open}>{busy?<Loader2/>:<Copy/>}{busy?(failed?`Opening ${name}…`:`Copying and opening ${name}…`):progress==='reported'?`Open ${name} again`:failed?`Continue to ${name}`:`Paste my review to ${name}`}</button>
-  {!previewOnly&&progress!=='reported'&&<small>{name} opens in a new tab. After posting, close that tab to return to your review portal.</small>}
-  {!previewOnly&&progress==='opened'&&<div className="review-confirmation stack"><p>Did you post your review on {name}?</p><button className="secondary full" disabled={!approved} onClick={onReported}>I posted my {name} review</button></div>}
+  {platform!=='google'&&approved&&!!text.trim()&&(!progress||failed)&&<small>{failed?`Copy the selected review below, then press “Continue to ${name}”.`:`Your review will be copied for you. Paste it on ${name}, then complete the steps there to post it.`}</small>}
+  <div className={progress?'handoff-result':'stack'}>
+   {progress&&<strong role="status">Thank you!</strong>}
+   <button className={progress?'secondary':'full'} disabled={!approved||!text.trim()||busy} onClick={open}>{busy?<Loader2/>:!progress&&<Copy/>}{busy?(failed?`Opening ${name}…`:`Copying and opening ${name}…`):failed?`Continue to ${name}`:progress?'Something went wrong? Try again':`Paste my review to ${name}`}</button>
+  </div>
+  {!previewOnly&&!progress&&<small>{name} opens in a new tab. After posting, close that tab to return to your review portal.</small>}
   {tabBlocked&&<div className="notice" role="status">Your review is copied. Your browser blocked the new tab. <a className="button secondary full" href={url} target="_blank" rel="noopener noreferrer" onClick={()=>{saveDraft();setTabBlocked(false);void onContinue();}}>Open {name} in a new tab</a></div>}
   {!approved&&!!text.trim()&&<small>Use Back to check your review, then tap Next to approve it.</small>}
   {failed&&<div className="notice" role="status">Your browser couldn’t copy automatically. Your text is selected at the bottom of this page: copy it with your phone’s menu, then choose “Continue to {name}”.</div>}

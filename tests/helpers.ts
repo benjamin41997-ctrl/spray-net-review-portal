@@ -24,7 +24,7 @@ export async function approveReview(page:Page){
 }
 
 export async function returnToCheck(page:Page){
- for(let i=0;i<2;i++){
+ for(let i=0;i<3;i++){
   if(await page.getByRole('heading',{name:'Check your review',exact:true}).isVisible())return;
   const previous=await page.locator('h1').textContent();await page.getByRole('button',{name:'Back',exact:true}).click();await expect(page.locator('h1')).not.toHaveText(previous!);
  }

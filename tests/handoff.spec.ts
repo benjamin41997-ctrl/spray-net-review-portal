@@ -18,7 +18,7 @@ for(const [platform,name] of [['angi','Angi'],['thumbtack','Thumbtack']] as cons
    await page.route(businessReviewLinks[platform],r=>r.fulfill({contentType:'text/html',body:'<h1>Mock external review page; nothing posted</h1>'}));
    await page.goto(site+'?code='+code);await startDraft(page);const text='The cabinets look good. Arrival was late.\n\nScheduling could be better.';await page.getByLabel('Your review',{exact:true}).fill(text);await approveReview(page);
    const card=page.locator(`.destination[data-platform=${platform}]`),button=card.getByRole('button',{name:`Paste my review to ${name}`,exact:true});await expect(button).toBeEnabled();await expect(card.getByRole('button')).toHaveCount(1);await expect(card.getByRole('link')).toHaveCount(0);
-   await openReviewTab(page,businessReviewLinks[platform],()=>button.click());await expect(page.getByRole('heading',{name:'Ready to share',exact:true})).toBeVisible();await expect(page.getByLabel('Your review',{exact:true})).toHaveValue(text);expect(await page.evaluate(()=>sessionStorage.getItem('qa-copied-text'))).toBe(text);await expect(button).toBeEnabled();
+   await openReviewTab(page,businessReviewLinks[platform],()=>button.click());await expect(page.getByRole('heading',{name:'Thank you for sharing your experience!',exact:true})).toBeVisible();await expect(page.getByLabel('Your review',{exact:true})).toHaveValue(text);expect(await page.evaluate(()=>sessionStorage.getItem('qa-copied-text'))).toBe(text);await expect(card.getByRole('button',{name:'Something went wrong? Try again',exact:true})).toBeEnabled();
    await expect.poll(async()=>(await activity(j.id)).clicks).toBe(1);expect((await activity(j.id)).reported).toBe(0);
   }finally{await admin.delete('/api/admin/jobs/'+j.id);}
  });

@@ -21,7 +21,7 @@ test('new projects receive the official link; edits and originating platform sta
  const override=await(await admin.post('/api/admin/jobs',{data:fixture})).json();expect(override.links.google).toBe(fixture.links.google);await admin.delete('/api/admin/jobs/'+override.id);
 });
 
-test('guided flow copies exactly the approved review and restores the sharing screen after Google',async({page})=>{
+test('guided flow copies approved text, automatically thanks the customer and supports retry without claiming publication',async({page})=>{
  const {j,code}=await project();
  await page.addInitScript(()=>{Object.defineProperty(navigator,'clipboard',{value:{writeText:async(text:string)=>sessionStorage.setItem('qa-copied-text',text)}});});
  await page.route(googleReviewURL,r=>r.fulfill({contentType:'text/html',body:'<h1>Mock Google sign-in / review page</h1>'}));
@@ -41,17 +41,16 @@ test('guided flow copies exactly the approved review and restores the sharing sc
  expect((await new AxeBuilder({page}).analyze()).violations).toEqual([]);
  await page.screenshot({path:`.sites-runtime/qa/google-handoff-${test.info().project.name}.png`,fullPage:true});
  await openReviewTab(page,googleReviewURL,()=>button.click());
- await expect(page.getByRole('heading',{name:'Ready to share',exact:true})).toBeVisible();
- await expect(page.getByLabel('Your review',{exact:true})).toHaveValue(text);await expect(button).toBeEnabled();
+ await expect(page.getByRole('heading',{name:'Thank you for sharing your experience!',exact:true})).toBeVisible();
+ const retry=page.getByRole('button',{name:'Something went wrong? Try again',exact:true});
+ await expect(page.getByLabel('Your review',{exact:true})).toHaveValue(text);await expect(retry).toBeEnabled();
  expect(await page.evaluate(()=>sessionStorage.getItem('qa-copied-text'))).toBe(text);
  await expect.poll(async()=>(await row(j.id)).clicks).toBe(1);expect((await row(j.id)).reported).toBe(0);
- await expect(page.getByRole('button',{name:'I posted my Google review',exact:true})).toBeVisible();
- await page.reload();await expect(page.getByRole('button',{name:'I posted my Google review',exact:true})).toBeVisible();expect((await row(j.id)).reported).toBe(0);
- await page.getByRole('button',{name:'I posted my Google review',exact:true}).click();await expect(page.getByRole('heading',{name:'Thank you for sharing your experience!',exact:true})).toBeVisible();await expect(page.getByRole('status')).toContainText('GoogleConfirmed by you');await expect.poll(async()=>(await row(j.id)).reported).toBe(1);
- await page.reload();await expect(page.getByRole('heading',{name:'Thank you for sharing your experience!',exact:true})).toBeVisible();expect((await row(j.id)).reported).toBe(1);
- await page.getByRole('button',{name:'View review options',exact:true}).click();await expect(page.getByRole('status')).toContainText('Google review marked complete by you.');
+ await expect(page.getByRole('button',{name:'I posted my Google review',exact:true})).toHaveCount(0);
+ await page.reload();await expect(retry).toBeVisible();expect((await row(j.id)).reported).toBe(0);
+ await openReviewTab(page,googleReviewURL,()=>retry.click());await expect.poll(async()=>(await row(j.id)).clicks).toBe(2);expect((await row(j.id)).reported).toBe(0);
  await returnToCheck(page);await page.getByLabel('Your review',{exact:true}).fill(text+' Updated.');
- await expect(button).toHaveCount(0);await page.getByRole('button',{name:'Next',exact:true}).click();await expect(page.getByRole('button',{name:'Open Google again',exact:true})).toBeEnabled();
+ await expect(button).toHaveCount(0);await page.getByRole('button',{name:'Next',exact:true}).click();await expect(retry).toBeEnabled();
  await admin.delete('/api/admin/jobs/'+j.id);
 });
 
@@ -78,24 +77,26 @@ test('blocked popups keep the portal and copied review, with a new-tab link and 
   await page.goto(site+'?code='+code);await startDraft(page);await page.getByLabel('Your review',{exact:true}).fill('My actual review.');await approveReview(page);
   await page.getByRole('button',{name:'Paste my review to Google',exact:true}).click();await expect(page.getByRole('status')).toContainText('browser blocked the new tab');await expect(page).toHaveURL(site+'?code='+code);expect(await page.evaluate(()=>sessionStorage.getItem('qa-copied-text'))).toBe('My actual review.');
   expect((await row(j.id)).clicks).toBe(0);expect((await row(j.id)).reported).toBe(0);
-  await openReviewTab(page,googleReviewURL,()=>page.getByRole('link',{name:'Open Google in a new tab',exact:true}).click());await expect(page.getByRole('button',{name:'I posted my Google review',exact:true})).toBeVisible();expect((await row(j.id)).reported).toBe(0);
+  await openReviewTab(page,googleReviewURL,()=>page.getByRole('link',{name:'Open Google in a new tab',exact:true}).click());await expect(page.getByRole('heading',{name:'Thank you for sharing your experience!',exact:true})).toBeVisible();expect((await row(j.id)).reported).toBe(0);
  }finally{await admin.delete('/api/admin/jobs/'+j.id);}
 });
 test('native browser clipboard can copy before opening the new review tab',async({page})=>{
  const {j,code}=await project();try{
   await page.goto(site+'?code='+code);await startDraft(page);await page.getByLabel('Your review',{exact:true}).fill('A genuine short review.');await approveReview(page);
   await openReviewTab(page,googleReviewURL,()=>page.getByRole('button',{name:'Paste my review to Google',exact:true}).click());
-  await expect(page.getByText('Your browser couldn’t copy automatically.',{exact:false})).toHaveCount(0);await expect(page.getByRole('button',{name:'I posted my Google review',exact:true})).toBeVisible();expect((await row(j.id)).reported).toBe(0);
+  await expect(page.getByText('Your browser couldn’t copy automatically.',{exact:false})).toHaveCount(0);await expect(page.getByRole('button',{name:'Something went wrong? Try again',exact:true})).toBeVisible();expect((await row(j.id)).reported).toBe(0);
   if(test.info().project.name==='chromium'){await page.context().grantPermissions(['clipboard-read']);expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe('A genuine short review.');}
  }finally{await admin.delete('/api/admin/jobs/'+j.id);}
 });
-test('customer can confirm Google and reuse the same draft on a second site without leaving the portal',async({page})=>{
+test('customer can move straight from Google to a second site without confirming or leaving the portal',async({page})=>{
  const {j,code}=await project({angi:fixture.links.angi});try{
   await page.addInitScript(()=>Object.defineProperty(navigator,'clipboard',{value:{writeText:async(text:string)=>sessionStorage.setItem('qa-copied-text',text)}}));
   await page.goto(site+'?code='+code);await startDraft(page);const text='The cabinets look good, but scheduling could improve.';await page.getByLabel('Your review',{exact:true}).fill(text);await approveReview(page);
-  await openReviewTab(page,googleReviewURL,()=>page.getByRole('button',{name:'Paste my review to Google',exact:true}).click());await page.getByRole('button',{name:'I posted my Google review',exact:true}).click();
+  await openReviewTab(page,googleReviewURL,()=>page.getByRole('button',{name:'Paste my review to Google',exact:true}).click());
+  await expect(page.locator('.destination[data-platform=google]').getByRole('status')).toHaveText('Thank you!');
+  await expect(page.getByRole('heading',{name:'Ready to share',exact:true})).toBeVisible();
   await openReviewTab(page,fixture.links.angi,()=>page.getByRole('button',{name:'Paste my review to Angi',exact:true}).click());expect(await page.evaluate(()=>sessionStorage.getItem('qa-copied-text'))).toBe(text);
-  await expect(page.getByRole('status')).toContainText('Google review marked complete by you.');await expect(page.getByRole('button',{name:'I posted my Angi review',exact:true})).toBeVisible();await expect.poll(async()=>(await row(j.id)).reported).toBe(1);
-  await page.reload();await expect(page.getByRole('status')).toContainText('Google review marked complete by you.');await expect(page.getByRole('button',{name:'I posted my Angi review',exact:true})).toBeVisible();await expect(page.getByLabel('Your review',{exact:true})).toHaveValue(text);
+  await expect(page.getByRole('heading',{name:'Thank you for sharing your experience!',exact:true})).toBeVisible();expect((await row(j.id)).reported).toBe(0);
+  await page.reload();await expect(page.getByRole('button',{name:'Something went wrong? Try again',exact:true})).toHaveCount(2);await expect(page.getByLabel('Your review',{exact:true})).toHaveValue(text);
  }finally{await admin.delete('/api/admin/jobs/'+j.id);}
 });
