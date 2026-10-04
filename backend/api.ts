@@ -21,7 +21,8 @@ export async function handle(r:Request,env:Env){const {db,bucket,requireAdmin,sa
    return json({jobs:jobs.map((j:any)=>({...j,links:JSON.parse(j.links)})),qrs,settings:settings()});
   }
   if(p[1]==='jobs'&&!p[2]&&method==='POST'){const b=await body(r);const source=clean(b.source);if(!['direct','training','angi','thumbtack','other'].includes(source))throw new HttpError(400,'Choose a customer source.');const id=crypto.randomUUID();
-   const suppliedLinks=links(b.links);const initialLinks={google:googleReviewURL,...suppliedLinks};
+   if(b.include_google!==undefined&&typeof b.include_google!=='boolean')throw new HttpError(400,'Check the review sources.');
+   const suppliedLinks=links(b.links);const initialLinks={...(b.include_google===false?{}:{google:googleReviewURL}),...suppliedLinks};
    await db().prepare('INSERT INTO jobs(id,internal_name,title,source,links,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').bind(id,clean(b.internal_name),clean(b.title),source,JSON.stringify(initialLinks),now,now).run();return json(await getJob(id),201);}
   if(p[1]==='jobs'&&p[2]){const id=p[2];
    if(method==='GET')return json(await getJob(id));
