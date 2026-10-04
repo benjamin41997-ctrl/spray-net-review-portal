@@ -104,10 +104,11 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
  const shortReview=!!text.trim()&&text.trim().split(/\s+/).length<25;
  const recordingControls=audioURL&&<details><summary>Your recording</summary><div className="stack"><audio controls src={audioURL} aria-label="Your recording"/><div className="actions"><button className="secondary" disabled={processing} onClick={()=>audio&&transcribe(audio)}>Retry transcription</button><button className="quiet" onClick={()=>audio&&saveFile(audio,'my-review-recording.'+(audio.type.includes('mp4')?'m4a':'webm'))}>Save recording</button></div></div></details>;
  const editor=<label>Your review<textarea aria-label="Your review" ref={textarea} disabled={!restored||recording||processing} maxLength={8000} value={text} onChange={e=>update(e.target.value)} placeholder="Write in your own words…"/></label>;
- return <main className="customer-shell guided">
+ const branding=<div className="brand"><img src={assetURL('branding/logo.png')} alt="Spray-Net"/><p className="eyebrow">SOUTH CHARLOTTE</p></div>;
+ return <main className={`customer-shell guided${stage==='welcome'?'':' compact-steps'}`}>
   {admin&&!preview&&<div className="actions"><a className="text-link" href={adminLink({assign:token})}>Manage this sticker</a></div>}
-  <header className="brand"><img src={assetURL('branding/logo.png')} alt="Spray-Net"/><p className="eyebrow">SOUTH CHARLOTTE</p></header>
-  {stage!=='welcome'&&<><button className="quiet back-button" disabled={recording||processing} onClick={back}><ArrowLeft/>Back</button><ol className="review-progress" aria-label="Review steps">{['Write','Check','Photos','Share'].map((label,i)=><li key={label} aria-current={i===progress?'step':undefined} className={i===progress?'current':i<progress?'complete':''}><span>{i+1}</span>{label}</li>)}</ol></>}
+  <header className={stage==='welcome'?'welcome-header':'step-header'}>{stage!=='welcome'&&<button className="quiet back-button" disabled={recording||processing} onClick={back}><ArrowLeft/>Back</button>}{branding}</header>
+  {stage!=='welcome'&&<ol className="review-progress" aria-label="Review steps">{['Write','Check','Photos','Share'].map((label,i)=><li key={label} aria-current={i===progress?'step':undefined} className={i===progress?'current':i<progress?'complete':''}><span>{i+1}</span>{label}</li>)}</ol>}
   <div className="intro"><h1 ref={heading} tabIndex={-1}>{processing?(preparation==='microphone'?'Connecting your microphone…':'Preparing your review…'):titles[stage]}</h1>{stage==='welcome'&&<p>A few simple steps to share your experience.</p>}</div>
   {preparation&&<ReviewPreparation phase={preparation}/>}
   {stage==='welcome'&&<section className="panel stack entry-choices" aria-label="Get started">

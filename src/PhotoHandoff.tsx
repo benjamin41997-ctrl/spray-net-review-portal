@@ -61,7 +61,7 @@ export default function PhotoHandoff({photos,selected,onSelect,photoURL,onContin
  const recovery=(ids:string[])=><details className="photo-options"><summary>Download didn’t start?</summary><small>Your browser may block several downloads at once. Tap each photo to download it separately. Look in Downloads or Files.</small>{recoveryOnly&&preparationStatus}<div className="actions">{photos.filter(p=>ids.includes(p.id)).map(p=><button className="secondary" key={p.id} disabled={saving||!ready?.files[p.id]} onClick={()=>download([p.id],false,true)}><Download/>Download {p.label}</button>)}</div>{saving&&<small role="status">{saveProgress}</small>}{recoveryOnly&&status&&<small role="status">{status}</small>}</details>;
  if(recoveryOnly)return recovery(selected);
  return <section className="panel stack" id="project-photos" aria-labelledby="photo-heading">
-  <div><h2 id="photo-heading">Your project photos</h2><small>Project photos supplied by Spray-Net.</small></div>
+  <h2 id="photo-heading">Your project photos</h2>
   <small>For your privacy, we remove hidden metadata from uploaded photos, including location and camera details.</small>
   {(mode==='choices'||mode==='select')&&<div className="photo-grid">{photos.map(p=><figure className="photo-card" key={p.id}><SecurePhoto src={photoURL(p.id)} alt={p.label}/><span className="photo-type">{p.kind==='after'?'After':p.kind}</span>{mode==='select'?<label className="photo-caption"><Checkbox checked={selected.includes(p.id)} aria-label={`Select ${p.label}`} onCheckedChange={v=>onSelect(v===true?[...selected,p.id]:selected.filter(id=>id!==p.id))}/>{p.label}</label>:<figcaption className="photo-caption">{p.label}</figcaption>}</figure>)}</div>}
   {preparationStatus}
