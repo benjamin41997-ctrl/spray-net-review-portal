@@ -1,6 +1,6 @@
 'use client';
 import {useEffect,useLayoutEffect,useRef,useState} from 'react';
-import {ArrowLeft,ArrowRight,Mic,Square,PenLine,Sparkles,RotateCcw,Loader2} from 'lucide-react';
+import {ArrowLeft,ArrowRight,Mic,Square,PenLine,Sparkles,RotateCcw,Loader2,CheckCircle2} from 'lucide-react';
 import {Checkbox} from '@/components/ui/checkbox';
 import {Toaster,toast} from 'sonner';
 import {api,orderedPlatforms,platformNames,saveFile} from '@/lib/client';
@@ -12,8 +12,8 @@ import PhotoHandoff from './PhotoHandoff';
 import ReviewPreparation,{type PreparationPhase} from './ReviewPreparation';
 
 type CustomerJob={id:string;title:string;source:string;demo:boolean;links:Record<string,string>;photos:{id:string;kind:string;label:string}[]};
-type Stage='welcome'|'compose'|'check'|'photos'|'share';
-const stages:Stage[]=['welcome','compose','check','photos','share'];
+type Stage='welcome'|'compose'|'check'|'photos'|'share'|'thanks';
+const stages:Stage[]=['welcome','compose','check','photos','share','thanks'];
 export default function Customer({token,initial:job,capabilities,preview,admin,jobPreview=false,staticDemo=false}:{token:string;initial:CustomerJob;capabilities:{transcription:boolean;cleanup:boolean};preview:boolean;admin:boolean;jobPreview?:boolean;staticDemo?:boolean}){
  const [stage,setStage]=useState<Stage>('welcome');
  const [mode,setMode]=useState<'type'|'voice'>('type');const [autoFormat,setAutoFormat]=useState(true);const [photoChoiceMade,setPhotoChoiceMade]=useState(false);
@@ -45,10 +45,13 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
    setNeedsDetail(blocked);setText(oldFollowUp?(typeof v.original==='string'?v.original.slice(0,8000):''):draft);setOriginal(typeof v.original==='string'?v.original.slice(0,8000):'');setAiEdited(v.aiEdited===true&&!blocked);
    const explicitPhotos=v.photoChoiceMade===true||(Array.isArray(v.selected)&&v.selected.length>0);setPhotoChoiceMade(explicitPhotos);setSelected(explicitPhotos?v.selected.filter((id:string)=>job.photos.some(p=>p.id===id)):job.photos.map(p=>p.id));
    setApproved(v.approved===true&&!!draft.trim()&&!blocked);
-   setHandoffs(Object.fromEntries(Object.entries(v.handoffs||{}).filter(([platform,status])=>['google','angi','thumbtack'].includes(platform)&&!!job.links[platform]&&['opened','reported'].includes(status as string))) as Record<string,'opened'|'reported'>);
+   const restoredHandoffs=Object.fromEntries(Object.entries(v.handoffs||{}).filter(([platform,status])=>['google','angi','thumbtack','yelp'].includes(platform)&&!!job.links[platform]&&['opened','reported'].includes(status as string))) as Record<string,'opened'|'reported'>;
+   setHandoffs(restoredHandoffs);
    setDownloaded((Array.isArray(v.downloaded)?v.downloaded:[]).filter((id:string)=>job.photos.some(p=>p.id===id)));setMode(v.mode==='voice'?'voice':'type');setAutoFormat(v.autoFormat!==false);
    const saved:Stage=stages.includes(v.stage)?v.stage:draft?'compose':'welcome';
-   setStage(blocked||(['photos','share'].includes(saved)&&!v.approved)?'check':saved);
+   const enabled=orderedPlatforms(job.source,job.links);
+   const complete=enabled.length>0&&enabled.every(p=>restoredHandoffs[p]==='reported');
+   setStage(blocked||(['photos','share','thanks'].includes(saved)&&!v.approved)?'check':saved==='thanks'&&!complete?'share':saved);
   }else localStorage.removeItem(key);}catch{setStorageIssue(true);}setRestored(true);
   try{if(!preview&&!sessionStorage.getItem(key+':visit')){void track('visit');sessionStorage.setItem(key+':visit','1');}}catch{void track('visit');}
   const context=(document as any).modelContext;const lifecycle=new AbortController();
@@ -98,12 +101,18 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
    setText(b.text);setAiEdited(true);setNeedsDetail(false);
   }catch(e){setEditingError((e as Error).message);setAiEdited(false);}finally{setPreparation(null);setStage('check');}
  }
- function back(){if(stage==='compose')setStage('welcome');else if(stage==='check')setStage('compose');else if(stage==='photos')setStage('check');else if(stage==='share')setStage(approved&&job.photos.length?'photos':text?'check':'welcome');}
+ function back(){if(stage==='compose')setStage('welcome');else if(stage==='check')setStage('compose');else if(stage==='photos')setStage('check');else if(stage==='share')setStage(approved&&job.photos.length?'photos':text?'check':'welcome');else if(stage==='thanks')setStage('share');}
  function clear(){update('');setOriginal('');setAiEdited(false);setNeedsDetail(false);setHandoffs({});setSelected(job.photos.map(p=>p.id));setDownloaded([]);setPhotoChoiceMade(false);setAutoFormat(true);setAudio(null);setStage('welcome');toast('Draft cleared on this device.');}
  const destinations=orderedPlatforms(job.source,job.links);
- const nextDestination=destinations.find(p=>p!=='yelp'&&handoffs[p]!=='reported');
- const titles:Record<Stage,string>={welcome:publicGreeting(job.title),compose:mode==='voice'?'Speak your review':'Type your review',check:'Check your review',photos:'Add your project photos',share:'Ready to share'};
- const progress=stage==='compose'?0:stage==='check'?1:stage==='photos'?2:3;
+ const nextDestination=destinations.find(p=>handoffs[p]!=='reported');
+ function opened(platform:string){setHandoffs(previous=>({...previous,[platform]:previous[platform]==='reported'?'reported':'opened'}));return track('click',platform);}
+ function report(platform:string){
+  if(!approved||handoffs[platform]!=='opened'||!destinations.includes(platform))return;
+  const updated={...handoffs,[platform]:'reported' as const};setHandoffs(updated);void track('reported',platform);
+  if(destinations.length>0&&destinations.every(p=>updated[p]==='reported'))setStage('thanks');
+ }
+ const titles:Record<Stage,string>={welcome:publicGreeting(job.title),compose:mode==='voice'?'Speak your review':'Type your review',check:'Check your review',photos:'Add your project photos',share:'Ready to share',thanks:'Thank you for sharing your experience!'};
+ const progress=stage==='compose'?0:stage==='check'?1:stage==='photos'?2:stage==='thanks'?4:3;
  const shortReview=!!text.trim()&&text.trim().split(/\s+/).length<25;
  const recordingControls=audioURL&&<details><summary>Your recording</summary><div className="stack"><audio controls src={audioURL} aria-label="Your recording"/><div className="actions"><button className="secondary" disabled={processing} onClick={()=>audio&&transcribe(audio)}>Retry transcription</button><button className="quiet" onClick={()=>audio&&saveFile(audio,'my-review-recording.'+(audio.type.includes('mp4')?'m4a':'webm'))}>Save recording</button></div></div></details>;
  const editor=<label>Your review<textarea aria-label="Your review" ref={textarea} disabled={!restored||recording||processing} maxLength={8000} value={text} onChange={e=>update(e.target.value)} placeholder="Write in your own words…"/></label>;
@@ -148,7 +157,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
    {!destinations.length&&<div className="notice">Review links haven’t been added yet. Your draft stays here.</div>}
    {destinations.map(p=><div className="destination" data-platform={p} key={p}>
     <div className="destination-heading"><h2>{platformNames[p]}</h2>{p===nextDestination&&destinations.length>1&&<span className="badge">Start here</span>}</div>
-    {p==='google'||p==='angi'||p==='thumbtack'?<ReviewHandoff platform={p} url={job.links[p]} text={text} approved={approved} photoCount={selected.length} includePhotos={selected.length>0} saveDraft={saveDraft} previewOnly={staticDemo} progress={handoffs[p]} onReported={()=>{if(!approved||handoffs[p]!=='opened')return;setHandoffs(previous=>({...previous,[p]:'reported'}));void track('reported',p);}} onContinue={()=>{setHandoffs(previous=>({...previous,[p]:previous[p]==='reported'?'reported':'opened'}));return track('click',p);}} onManualCopy={()=>{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});}}/>:<><small>View Spray-Net South Charlotte’s business page on Yelp.</small>{approved&&<button className="secondary full" onClick={async()=>{try{await navigator.clipboard.writeText(text);toast.success('Review copied.');}catch{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});toast('Copy the selected text using your phone’s menu.');}}}>Copy review</button>}<a className="button full" href={job.links[p]} target="_blank" rel="noopener noreferrer" onClick={()=>{saveDraft();void track('click',p);}}>Open Yelp business page</a></>}
+    {p==='google'||p==='angi'||p==='thumbtack'?<ReviewHandoff platform={p} url={job.links[p]} text={text} approved={approved} photoCount={selected.length} includePhotos={selected.length>0} saveDraft={saveDraft} previewOnly={staticDemo} progress={handoffs[p]} onReported={()=>report(p)} onContinue={()=>opened(p)} onManualCopy={()=>{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});}}/>:<div className="stack"><small>View Spray-Net South Charlotte’s business page on Yelp.</small>{handoffs[p]==='reported'&&<div className="notice success" role="status">Yelp review marked complete by you.</div>}{approved&&<button className="secondary full" onClick={async()=>{try{await navigator.clipboard.writeText(text);toast.success('Review copied.');}catch{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});toast('Copy the selected text using your phone’s menu.');}}}>Copy review</button>}<a className="button full" href={job.links[p]} target="_blank" rel="noopener noreferrer" onClick={()=>{saveDraft();void opened(p);}}>Open Yelp business page</a>{handoffs[p]==='opened'&&<><small>Yelp opens in another tab. Close that tab to return here. Posted your review?</small><button className="secondary full" onClick={()=>report(p)}>I posted my Yelp review</button></>}</div>}
    </div>)}
    <div className="share-extras">
     {selected.some(id=>downloaded.includes(id))&&<small role="status">Photo downloads requested. If your browser asks, allow multiple downloads. Look in Downloads or Files.</small>}
@@ -156,8 +165,16 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
     {text.trim()&&<details open={showReview} onToggle={e=>setShowReview(e.currentTarget.open)} className="original-review"><summary>See my review</summary><label>Your review<textarea aria-label="Your review" ref={textarea} readOnly value={text}/></label><small>You can use Back to return to the earlier steps.</small></details>}
    </div>
   </section>}
+  {stage==='thanks'&&<section className="panel stack" aria-label="Review completion">
+   <CheckCircle2 size={40} aria-hidden="true"/>
+   <p>You’ve confirmed completion on every review site selected for your project. We appreciate you taking the time to share honest feedback.</p>
+   <div className="stack completion-list" role="status">{destinations.map(p=><div key={p}><strong>{platformNames[p]}</strong><span>Confirmed by you</span></div>)}</div>
+   <small>Your confirmations are saved on this device. Publication hasn’t been independently verified.</small>
+   <button className="secondary full" onClick={()=>setStage('share')}>View review options</button>
+   <small>You’re all set. You can close this page.</small>
+  </section>}
   {text&&storageIssue&&<div className="draft-notice"><small>Your browser could not save this draft. Copy it before leaving.</small></div>}
-  <footer className="footer">{text&&<button className="quiet" disabled={recording||processing} onClick={clear}>Clear my draft</button>}</footer>
+  <footer className="footer">{text&&stage!=='thanks'&&<button className="quiet" disabled={recording||processing} onClick={clear}>Clear my draft</button>}</footer>
   <Toaster richColors/>
  </main>;
 }

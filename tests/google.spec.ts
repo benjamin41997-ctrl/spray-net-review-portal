@@ -47,8 +47,9 @@ test('guided flow copies exactly the approved review and restores the sharing sc
  await expect.poll(async()=>(await row(j.id)).clicks).toBe(1);expect((await row(j.id)).reported).toBe(0);
  await expect(page.getByRole('button',{name:'I posted my Google review',exact:true})).toBeVisible();
  await page.reload();await expect(page.getByRole('button',{name:'I posted my Google review',exact:true})).toBeVisible();expect((await row(j.id)).reported).toBe(0);
- await page.getByRole('button',{name:'I posted my Google review',exact:true}).click();await expect(page.getByRole('status')).toContainText('Google review marked complete by you.');await expect.poll(async()=>(await row(j.id)).reported).toBe(1);
- await page.reload();await expect(page.getByRole('status')).toContainText('Google review marked complete by you.');expect((await row(j.id)).reported).toBe(1);
+ await page.getByRole('button',{name:'I posted my Google review',exact:true}).click();await expect(page.getByRole('heading',{name:'Thank you for sharing your experience!',exact:true})).toBeVisible();await expect(page.getByRole('status')).toContainText('GoogleConfirmed by you');await expect.poll(async()=>(await row(j.id)).reported).toBe(1);
+ await page.reload();await expect(page.getByRole('heading',{name:'Thank you for sharing your experience!',exact:true})).toBeVisible();expect((await row(j.id)).reported).toBe(1);
+ await page.getByRole('button',{name:'View review options',exact:true}).click();await expect(page.getByRole('status')).toContainText('Google review marked complete by you.');
  await returnToCheck(page);await page.getByLabel('Your review',{exact:true}).fill(text+' Updated.');
  await expect(button).toHaveCount(0);await page.getByRole('button',{name:'Next',exact:true}).click();await expect(page.getByRole('button',{name:'Open Google again',exact:true})).toBeEnabled();
  await admin.delete('/api/admin/jobs/'+j.id);
