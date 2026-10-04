@@ -9,6 +9,7 @@ test('production static bundle resolves customer query links and keeps mock admi
  // This test proxies API requests with route.fetch, which bypasses context mocks.
  await page.route('https://api.example.test/api/customer/*/cleanup',route=>route.fulfill({headers:{'access-control-allow-origin':'http://127.0.0.1:4173'},json:{text:route.request().postDataJSON().text}}));
  await page.goto(staticSite+'?code='+sample.qrs[0].token);await expect(page.getByRole('heading',{name:'We loved working with you, Sam!'})).toBeVisible();await startDraft(page);
+ await expect(page.getByText('Sample project · please don’t submit sample feedback to a real listing.',{exact:true})).toHaveCount(0);
  const review='These cabinets look good. The start was a day late.';await page.getByLabel('Your review',{exact:true}).fill(review);await page.reload();await expect(page.getByLabel('Your review',{exact:true})).toHaveValue(review);expect(page.url()).toBe(staticSite+'?code='+sample.qrs[0].token);await approveReview(page);await expect(page.locator('.photo-card img').first()).toBeVisible();
  await page.goto(staticSite+'?admin=1');await expect(page.getByRole('heading',{name:'Prepare their project card.'})).toBeVisible();await expect(page.getByRole('button',{name:'Enter local admin preview'})).toHaveCount(0);
  expect((await request.get(staticSite+'api/admin/dashboard')).status()).toBe(404);expect((await request.get(staticSite+'?code='+sample.qrs[0].token)).status()).toBe(200);

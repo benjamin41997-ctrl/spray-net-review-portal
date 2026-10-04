@@ -5,7 +5,7 @@ test('unconnected Pages preview supports drafts and real photo downloads without
  const requests:string[]=[];page.on('request',r=>requests.push(r.url()));
  await page.addInitScript(()=>{Object.defineProperty(navigator,'clipboard',{value:{writeText:async(text:string)=>{(window as any).copiedPreviewReview=text;}}});});
  await page.goto(site);
- await expect(page.getByText('Online preview · sample project',{exact:true})).toBeVisible();
+ await expect(page.getByText('Online preview · sample project',{exact:true})).toHaveCount(0);
  await expect(page.getByText('AI formatting isn’t connected yet. You can type and try the photo flow; your wording will stay unchanged.',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Type my review',exact:true}).click();
  await expect(page.getByRole('checkbox',{name:'Automatically format my review'})).toHaveCount(0);
