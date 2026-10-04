@@ -6,7 +6,7 @@ import {Toaster,toast} from 'sonner';
 import {api,orderedPlatforms,platformNames,saveFile} from '@/lib/client';
 import {adminLink,assetURL,photoURL as remotePhotoURL} from '@/lib/urls';
 import {publicGreeting} from '@/lib/greeting';
-import GoogleHandoff from './GoogleHandoff';
+import ReviewHandoff from './ReviewHandoff';
 import PhotoHandoff from './PhotoHandoff';
 import ReviewPreparation,{type PreparationPhase} from './ReviewPreparation';
 
@@ -141,7 +141,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
    {!destinations.length&&<div className="notice">Review links haven’t been added yet. Your draft stays here.</div>}
    {destinations.map((p,i)=><div className="destination" data-platform={p} key={p}>
     <div className="destination-heading"><h2>{platformNames[p]}</h2>{i===0&&destinations.length>1&&<span className="badge">Start here</span>}</div>
-    {p==='google'?<GoogleHandoff url={job.links[p]} text={text} approved={approved} photoCount={selected.length} includePhotos={selected.length>0} saveDraft={saveDraft} previewOnly={staticDemo} onContinue={()=>track('click',p)} onManualCopy={()=>{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});}}/>:<><small>{p==='yelp'?'View Spray-Net South Charlotte’s business page on Yelp.':'Copy your review, then paste it and attach any saved photos on the next page.'}</small>{approved&&<button className="secondary full" onClick={async()=>{try{await navigator.clipboard.writeText(text);toast.success('Review copied.');}catch{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});toast('Copy the selected text using your phone’s menu.');}}}>Copy review</button>}<a className="button full" href={job.links[p]} target="_blank" rel="noopener noreferrer" onClick={()=>{saveDraft();void track('click',p);}}>{p==='yelp'?'Open Yelp business page':`Continue to ${platformNames[p]}`}</a></>}
+    {p==='google'||p==='angi'||p==='thumbtack'?<ReviewHandoff platform={p} url={job.links[p]} text={text} approved={approved} photoCount={selected.length} includePhotos={selected.length>0} saveDraft={saveDraft} previewOnly={staticDemo} onContinue={()=>track('click',p)} onManualCopy={()=>{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});}}/>:<><small>View Spray-Net South Charlotte’s business page on Yelp.</small>{approved&&<button className="secondary full" onClick={async()=>{try{await navigator.clipboard.writeText(text);toast.success('Review copied.');}catch{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});toast('Copy the selected text using your phone’s menu.');}}}>Copy review</button>}<a className="button full" href={job.links[p]} target="_blank" rel="noopener noreferrer" onClick={()=>{saveDraft();void track('click',p);}}>Open Yelp business page</a></>}
    </div>)}
    <div className="share-extras">
     {selected.some(id=>downloaded.includes(id))&&<small role="status">Photo downloads requested. If your browser asks, allow multiple downloads. Look in Downloads or Files.</small>}
