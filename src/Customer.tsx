@@ -24,6 +24,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
  const [seconds,setSeconds]=useState(0);const [audio,setAudio]=useState<Blob|null>(null);const [audioURL,setAudioURL]=useState('');
  const [editingError,setEditingError]=useState('');const [showReview,setShowReview]=useState(false);
  const [needsDetail,setNeedsDetail]=useState(false);
+ const [handoffs,setHandoffs]=useState<Record<string,'opened'|'reported'>>({});
  const recorder=useRef<MediaRecorder|null>(null);const stream=useRef<MediaStream|null>(null);
  const recordingBase=useRef('');const liveDraft=useRef({text,autoFormat});liveDraft.current={text,autoFormat};
  const recordingTimer=useRef<ReturnType<typeof setInterval>|null>(null);const limitTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
@@ -44,6 +45,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
    setNeedsDetail(blocked);setText(oldFollowUp?(typeof v.original==='string'?v.original.slice(0,8000):''):draft);setOriginal(typeof v.original==='string'?v.original.slice(0,8000):'');setAiEdited(v.aiEdited===true&&!blocked);
    const explicitPhotos=v.photoChoiceMade===true||(Array.isArray(v.selected)&&v.selected.length>0);setPhotoChoiceMade(explicitPhotos);setSelected(explicitPhotos?v.selected.filter((id:string)=>job.photos.some(p=>p.id===id)):job.photos.map(p=>p.id));
    setApproved(v.approved===true&&!!draft.trim()&&!blocked);
+   setHandoffs(Object.fromEntries(Object.entries(v.handoffs||{}).filter(([platform,status])=>['google','angi','thumbtack'].includes(platform)&&!!job.links[platform]&&['opened','reported'].includes(status as string))) as Record<string,'opened'|'reported'>);
    setDownloaded((Array.isArray(v.downloaded)?v.downloaded:[]).filter((id:string)=>job.photos.some(p=>p.id===id)));setMode(v.mode==='voice'?'voice':'type');setAutoFormat(v.autoFormat!==false);
    const saved:Stage=stages.includes(v.stage)?v.stage:draft?'compose':'welcome';
    setStage(blocked||(['photos','share'].includes(saved)&&!v.approved)?'check':saved);
@@ -53,10 +55,10 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
   if(context?.registerTool){Promise.resolve(context.registerTool({name:'stage_review_text',description:'Place customer-provided text in the editable draft. Does not approve, publish or improve it.',inputSchema:{type:'object',properties:{text:{type:'string',maxLength:8000}},required:['text'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:true},execute(input:any){if(typeof input.text!=='string'||input.text.length>8000)throw Error('Text must be at most 8000 characters.');update(input.text);setStage('compose');return {staged:true,approved:false,published:false};}},{signal:lifecycle.signal})).catch(()=>{});}
   return()=>{lifecycle.abort();if(recordingTimer.current)clearInterval(recordingTimer.current);if(limitTimer.current)clearTimeout(limitTimer.current);if(recorder.current){recorder.current.onstop=null;if(recorder.current.state==='recording')recorder.current.stop();}stream.current?.getTracks().forEach(t=>t.stop());};
  },[key]);
- function saveDraft(){if(!restored)return;try{localStorage.setItem(key,JSON.stringify({text,original,aiEdited,needsDetail,selected,downloaded,approved,stage,mode,autoFormat,photoChoiceMade,savedAt:Date.now()}));}catch{setStorageIssue(true);}}
+ function saveDraft(){if(!restored)return;try{localStorage.setItem(key,JSON.stringify({text,original,aiEdited,needsDetail,handoffs,selected,downloaded,approved,stage,mode,autoFormat,photoChoiceMade,savedAt:Date.now()}));}catch{setStorageIssue(true);}}
  // Persist before painting the next step: reload/navigation immediately after
  // an AI response must not restore the previous wording or approval state.
- useLayoutEffect(saveDraft,[text,original,aiEdited,needsDetail,selected,downloaded,approved,stage,mode,autoFormat,photoChoiceMade,restored,key]);
+ useLayoutEffect(saveDraft,[text,original,aiEdited,needsDetail,handoffs,selected,downloaded,approved,stage,mode,autoFormat,photoChoiceMade,restored,key]);
  useEffect(()=>{if(restored){heading.current?.focus({preventScroll:true});window.scrollTo({top:0,behavior:'instant'});}},[stage,restored,processing]);
  useEffect(()=>{if(!audio){setAudioURL('');return;}const u=URL.createObjectURL(audio);setAudioURL(u);return()=>URL.revokeObjectURL(u);},[audio]);
  function stop(){if(recordingTimer.current)clearInterval(recordingTimer.current);if(limitTimer.current)clearTimeout(limitTimer.current);if(recorder.current?.state==='recording'){setPreparation('transcribing');recorder.current.stop();}stream.current?.getTracks().forEach(t=>t.stop());setRecording(false);}
@@ -97,8 +99,9 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
   }catch(e){setEditingError((e as Error).message);setAiEdited(false);}finally{setPreparation(null);setStage('check');}
  }
  function back(){if(stage==='compose')setStage('welcome');else if(stage==='check')setStage('compose');else if(stage==='photos')setStage('check');else if(stage==='share')setStage(approved&&job.photos.length?'photos':text?'check':'welcome');}
- function clear(){update('');setOriginal('');setAiEdited(false);setNeedsDetail(false);setSelected(job.photos.map(p=>p.id));setDownloaded([]);setPhotoChoiceMade(false);setAutoFormat(true);setAudio(null);setStage('welcome');toast('Draft cleared on this device.');}
+ function clear(){update('');setOriginal('');setAiEdited(false);setNeedsDetail(false);setHandoffs({});setSelected(job.photos.map(p=>p.id));setDownloaded([]);setPhotoChoiceMade(false);setAutoFormat(true);setAudio(null);setStage('welcome');toast('Draft cleared on this device.');}
  const destinations=orderedPlatforms(job.source,job.links);
+ const nextDestination=destinations.find(p=>p!=='yelp'&&handoffs[p]!=='reported');
  const titles:Record<Stage,string>={welcome:publicGreeting(job.title),compose:mode==='voice'?'Speak your review':'Type your review',check:'Check your review',photos:'Add your project photos',share:'Ready to share'};
  const progress=stage==='compose'?0:stage==='check'?1:stage==='photos'?2:3;
  const shortReview=!!text.trim()&&text.trim().split(/\s+/).length<25;
@@ -143,9 +146,9 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
   </>}
   {stage==='share'&&<section className="panel stack" id="destinations">
    {!destinations.length&&<div className="notice">Review links haven’t been added yet. Your draft stays here.</div>}
-   {destinations.map((p,i)=><div className="destination" data-platform={p} key={p}>
-    <div className="destination-heading"><h2>{platformNames[p]}</h2>{i===0&&destinations.length>1&&<span className="badge">Start here</span>}</div>
-    {p==='google'||p==='angi'||p==='thumbtack'?<ReviewHandoff platform={p} url={job.links[p]} text={text} approved={approved} photoCount={selected.length} includePhotos={selected.length>0} saveDraft={saveDraft} previewOnly={staticDemo} onContinue={()=>track('click',p)} onManualCopy={()=>{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});}}/>:<><small>View Spray-Net South Charlotte’s business page on Yelp.</small>{approved&&<button className="secondary full" onClick={async()=>{try{await navigator.clipboard.writeText(text);toast.success('Review copied.');}catch{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});toast('Copy the selected text using your phone’s menu.');}}}>Copy review</button>}<a className="button full" href={job.links[p]} target="_blank" rel="noopener noreferrer" onClick={()=>{saveDraft();void track('click',p);}}>Open Yelp business page</a></>}
+   {destinations.map(p=><div className="destination" data-platform={p} key={p}>
+    <div className="destination-heading"><h2>{platformNames[p]}</h2>{p===nextDestination&&destinations.length>1&&<span className="badge">Start here</span>}</div>
+    {p==='google'||p==='angi'||p==='thumbtack'?<ReviewHandoff platform={p} url={job.links[p]} text={text} approved={approved} photoCount={selected.length} includePhotos={selected.length>0} saveDraft={saveDraft} previewOnly={staticDemo} progress={handoffs[p]} onReported={()=>{if(!approved||handoffs[p]!=='opened')return;setHandoffs(previous=>({...previous,[p]:'reported'}));void track('reported',p);}} onContinue={()=>{setHandoffs(previous=>({...previous,[p]:previous[p]==='reported'?'reported':'opened'}));return track('click',p);}} onManualCopy={()=>{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});}}/>:<><small>View Spray-Net South Charlotte’s business page on Yelp.</small>{approved&&<button className="secondary full" onClick={async()=>{try{await navigator.clipboard.writeText(text);toast.success('Review copied.');}catch{setShowReview(true);requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.select();});toast('Copy the selected text using your phone’s menu.');}}}>Copy review</button>}<a className="button full" href={job.links[p]} target="_blank" rel="noopener noreferrer" onClick={()=>{saveDraft();void track('click',p);}}>Open Yelp business page</a></>}
    </div>)}
    <div className="share-extras">
     {selected.some(id=>downloaded.includes(id))&&<small role="status">Photo downloads requested. If your browser asks, allow multiple downloads. Look in Downloads or Files.</small>}

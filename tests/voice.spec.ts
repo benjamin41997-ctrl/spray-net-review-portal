@@ -1,6 +1,6 @@
 import {test,expect,type Page} from './test';
 import AxeBuilder from '@axe-core/playwright';
-import {login,browserAdmin,site,origin,startDraft} from './helpers';
+import {login,browserAdmin,site,origin,startDraft,openReviewTab} from './helpers';
 async function setup(page:Page,cleanup=true){
  const {admin,token}=await login();const sample=await(await admin.post('/api/admin/seed',{data:{}})).json();await admin.dispose();await browserAdmin(page,token);
  await page.route('**/api/customer/'+sample.qrs[0].token+'?preview=1',async route=>{const response=await route.fetch();const data=await response.json();data.settings={transcription:true,cleanup};await route.fulfill({response,json:data});});
@@ -38,7 +38,7 @@ test('typed review uses AI, retains criticism and training disclosure, and copie
  await page.goto(site+'?code='+code+'&preview=1');await startDraft(page);await expect(page.getByRole('checkbox',{name:'Automatically format my review',exact:true})).toBeChecked();await page.getByLabel('Your review',{exact:true}).fill(original);await page.getByRole('button',{name:'Next',exact:true}).click();
  await expect(page.getByLabel('Your review',{exact:true})).toHaveValue(formatted);expect(calls).toBe(1);await expect(page.getByText('We’ve tidied the wording.',{exact:false})).toBeVisible();await page.reload();await expect(page.getByLabel('Your review',{exact:true})).toHaveValue(formatted);await expect(page.getByRole('button',{name:'Use my original wording',exact:true})).toBeVisible();
  const final=formatted+' I would ask about the schedule next time.';await page.getByLabel('Your review',{exact:true}).fill(final);await page.getByRole('button',{name:'Next',exact:true}).click();await page.getByRole('button',{name:"Don't share my photos, I don't want neighbors to be jealous…",exact:true}).click();await page.getByRole('button',{name:'Next',exact:true}).click();
- await page.getByRole('button',{name:'Paste my review to Google',exact:true}).click();await expect(page).toHaveURL('https://g.page/r/CdBR4AUNk5DkEAI/review');await page.goBack();await expect(page.getByLabel('Your review',{exact:true})).toHaveValue(final);expect(await page.evaluate(()=>sessionStorage.getItem('qa-copied-text'))).toBe(final);
+ await openReviewTab(page,'https://g.page/r/CdBR4AUNk5DkEAI/review',()=>page.getByRole('button',{name:'Paste my review to Google',exact:true}).click());await expect(page.getByLabel('Your review',{exact:true})).toHaveValue(final);expect(await page.evaluate(()=>sessionStorage.getItem('qa-copied-text'))).toBe(final);
 });
 
 test('failed AI request leaves exact original available and AI can be bypassed',async({page})=>{

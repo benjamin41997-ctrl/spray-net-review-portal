@@ -1,7 +1,7 @@
 import {test,expect,type APIRequestContext} from './test';
 import AxeBuilder from '@axe-core/playwright';
 import {mkdir} from 'node:fs/promises';
-import {login,browserAdmin,site,apiBase,origin,fixture,make,patch,startDraft,approveReview,returnToCheck} from './helpers';
+import {login,browserAdmin,site,apiBase,origin,fixture,make,patch,startDraft,approveReview,returnToCheck,openReviewTab} from './helpers';
 let admin:APIRequestContext;let token:string;let codes:string[];let sample:any;
 test.beforeAll(async()=>{({admin,token}=await login());await admin.post('/api/admin/batch',{data:{count:100}});const d=await(await admin.get('/api/admin/dashboard')).json();codes=d.qrs.filter((q:any)=>!q.assigned_at).map((q:any)=>q.token);sample=await(await admin.post('/api/admin/seed',{data:{}})).json();});
 test.afterAll(async()=>{await admin.dispose();});
@@ -68,7 +68,7 @@ test('draft survives external app return and metrics never claim publication',as
  await page.goto(site+'?code='+code);
  await startDraft(page);const review='Cabinets look good. The start was a day late.';await page.getByLabel('Your review',{exact:true}).fill(review);await approveReview(page);await page.reload();await expect(page.getByLabel('Your review',{exact:true})).toHaveValue(review);await expect(page.getByRole('button',{name:'Paste my review to Google',exact:true})).toBeEnabled();
  await expect(page.locator('.destination').first().getByRole('button',{name:'Paste my review to Angi',exact:true})).toBeEnabled();await expect(page.getByRole('link',{name:'Continue to Yelp'})).toHaveCount(0);await expect(page.getByRole('link',{name:'Open Yelp business page'})).toBeVisible();
- await page.route('https://www.angi.com/write-review/test',r=>r.fulfill({body:'Mock external platform; no review is published.'}));await page.getByRole('button',{name:'Paste my review to Angi',exact:true}).click();await expect(page).toHaveURL(fixture.links.angi);await page.goBack();await expect(page.getByLabel('Your review',{exact:true})).toHaveValue(review);expect(await page.evaluate(()=>sessionStorage.getItem('qa-copied-text'))).toBe(review);
+ await page.route('https://www.angi.com/write-review/test',r=>r.fulfill({body:'Mock external platform; no review is published.'}));await openReviewTab(page,fixture.links.angi,()=>page.getByRole('button',{name:'Paste my review to Angi',exact:true}).click());await expect(page.getByLabel('Your review',{exact:true})).toHaveValue(review);expect(await page.evaluate(()=>sessionStorage.getItem('qa-copied-text'))).toBe(review);
  let d=await(await admin.get('/api/admin/dashboard')).json();let row=d.jobs.find((x:any)=>x.id===j.id);expect(row.visits).toBe(1);expect(row.clicks).toBe(1);expect(row.reported).toBe(0);
  await expect(page.getByText('Already submitted your review?',{exact:true})).toHaveCount(0);
  await returnToCheck(page);await page.getByRole('button',{name:'Back',exact:true}).click();await page.getByRole('button',{name:'Speak instead',exact:true}).click();await page.getByRole('button',{name:'Start recording',exact:true}).click();await expect(page.getByText('Voice transcription isn’t connected yet. Use the microphone on your phone keyboard, or type below.',{exact:true})).toBeVisible();await expect(page.getByText('AI formatting isn’t connected yet.',{exact:false})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();expect((await new AxeBuilder({page}).analyze()).violations).toEqual([]);

@@ -11,6 +11,13 @@ export async function patch(admin:APIRequestContext,job:any,status:string){retur
 export async function startDraft(page:Page,mode:'type'|'voice'='type'){
  await page.getByRole('button',{name:mode==='voice'?'Speak my review':'Type my review',exact:true}).click();
 }
+export async function openReviewTab(page:Page,url:string,click:()=>Promise<void>){
+ const portal=page.url();
+ // Popup navigation is outside the parent page's route handlers.
+ await page.context().route(url,r=>r.fulfill({contentType:'text/html',body:'<h1>Mock external review page. Nothing is posted.</h1>'}));
+ const opening=page.waitForEvent('popup');await click();const tab=await opening;
+ await expect(tab).toHaveURL(url);expect(await tab.evaluate(()=>window.opener===null)).toBe(true);await expect(page).toHaveURL(portal);await tab.close();
+}
 export async function approveReview(page:Page){
  await page.getByRole('button',{name:'Next',exact:true}).click();
  await page.getByRole('button',{name:'Next',exact:true}).click();
