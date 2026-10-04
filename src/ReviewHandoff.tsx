@@ -30,7 +30,7 @@ export default function ReviewHandoff({platform,url,text,approved,photoCount,inc
    <li>{failed?'Copy the selected review below, then press “Continue to Google”.':'Press “Paste my review to Google” below.'}</li>
    <li>Sign in to Google if prompted.</li>
    <li>{failed?'Paste the review you copied.':'Paste your review. It is automatically copied for you.'}</li>
-   <li>{includePhotos?'Press “Add photos & videos”.':'You can post without photos.'}</li>
+   <li>{includePhotos?'Attach the transformation pictures you downloaded.':'You can post without photos.'}</li>
    <li>{includePhotos?`Import the ${photoCount} transformation photo${photoCount===1?'':'s'} you already downloaded.`:'Choose your rating.'}</li>
    <li>{includePhotos?'Confirm everything looks correct, choose your rating, and press “Post”.':'Confirm everything looks correct and press “Post”.'}</li>
   </ol>}
