@@ -6,6 +6,7 @@ import {Toaster,toast} from 'sonner';
 import {api,orderedPlatforms,platformNames,saveFile} from '@/lib/client';
 import {adminLink,assetURL,photoURL as remotePhotoURL} from '@/lib/urls';
 import {publicGreeting} from '@/lib/greeting';
+import {isEditorFollowUp,reviewNeedsDetailMessage} from '@/lib/review-result';
 import ReviewHandoff from './ReviewHandoff';
 import PhotoHandoff from './PhotoHandoff';
 import ReviewPreparation,{type PreparationPhase} from './ReviewPreparation';
@@ -22,6 +23,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
  const [recording,setRecording]=useState(false);const [preparation,setPreparation]=useState<PreparationPhase|null>(null);const processing=preparation!==null;
  const [seconds,setSeconds]=useState(0);const [audio,setAudio]=useState<Blob|null>(null);const [audioURL,setAudioURL]=useState('');
  const [editingError,setEditingError]=useState('');const [showReview,setShowReview]=useState(false);
+ const [needsDetail,setNeedsDetail]=useState(false);
  const recorder=useRef<MediaRecorder|null>(null);const stream=useRef<MediaStream|null>(null);
  const recordingBase=useRef('');const liveDraft=useRef({text,autoFormat});liveDraft.current={text,autoFormat};
  const recordingTimer=useRef<ReturnType<typeof setInterval>|null>(null);const limitTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
@@ -38,22 +40,23 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
  useEffect(()=>{
   try{const v=JSON.parse(localStorage.getItem(key)||'null');if(v&&Date.now()-v.savedAt<30*86400000){
    const draft=typeof v.text==='string'?v.text.slice(0,8000):'';
-   setText(draft);setOriginal(typeof v.original==='string'?v.original.slice(0,8000):'');setAiEdited(v.aiEdited===true);
+   const oldFollowUp=v.aiEdited===true&&isEditorFollowUp(draft);const blocked=v.needsDetail===true||oldFollowUp;
+   setNeedsDetail(blocked);setText(oldFollowUp?(typeof v.original==='string'?v.original.slice(0,8000):''):draft);setOriginal(typeof v.original==='string'?v.original.slice(0,8000):'');setAiEdited(v.aiEdited===true&&!blocked);
    const explicitPhotos=v.photoChoiceMade===true||(Array.isArray(v.selected)&&v.selected.length>0);setPhotoChoiceMade(explicitPhotos);setSelected(explicitPhotos?v.selected.filter((id:string)=>job.photos.some(p=>p.id===id)):job.photos.map(p=>p.id));
-   setApproved(v.approved===true&&!!draft.trim());
+   setApproved(v.approved===true&&!!draft.trim()&&!blocked);
    setDownloaded((Array.isArray(v.downloaded)?v.downloaded:[]).filter((id:string)=>job.photos.some(p=>p.id===id)));setMode(v.mode==='voice'?'voice':'type');setAutoFormat(v.autoFormat!==false);
    const saved:Stage=stages.includes(v.stage)?v.stage:draft?'compose':'welcome';
-   setStage(saved==='photos'&&!v.approved?'check':saved);
+   setStage(blocked||(['photos','share'].includes(saved)&&!v.approved)?'check':saved);
   }else localStorage.removeItem(key);}catch{setStorageIssue(true);}setRestored(true);
   try{if(!preview&&!sessionStorage.getItem(key+':visit')){void track('visit');sessionStorage.setItem(key+':visit','1');}}catch{void track('visit');}
   const context=(document as any).modelContext;const lifecycle=new AbortController();
   if(context?.registerTool){Promise.resolve(context.registerTool({name:'stage_review_text',description:'Place customer-provided text in the editable draft. Does not approve, publish or improve it.',inputSchema:{type:'object',properties:{text:{type:'string',maxLength:8000}},required:['text'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:true},execute(input:any){if(typeof input.text!=='string'||input.text.length>8000)throw Error('Text must be at most 8000 characters.');update(input.text);setStage('compose');return {staged:true,approved:false,published:false};}},{signal:lifecycle.signal})).catch(()=>{});}
   return()=>{lifecycle.abort();if(recordingTimer.current)clearInterval(recordingTimer.current);if(limitTimer.current)clearTimeout(limitTimer.current);if(recorder.current){recorder.current.onstop=null;if(recorder.current.state==='recording')recorder.current.stop();}stream.current?.getTracks().forEach(t=>t.stop());};
  },[key]);
- function saveDraft(){if(!restored)return;try{localStorage.setItem(key,JSON.stringify({text,original,aiEdited,selected,downloaded,approved,stage,mode,autoFormat,photoChoiceMade,savedAt:Date.now()}));}catch{setStorageIssue(true);}}
+ function saveDraft(){if(!restored)return;try{localStorage.setItem(key,JSON.stringify({text,original,aiEdited,needsDetail,selected,downloaded,approved,stage,mode,autoFormat,photoChoiceMade,savedAt:Date.now()}));}catch{setStorageIssue(true);}}
  // Persist before painting the next step: reload/navigation immediately after
  // an AI response must not restore the previous wording or approval state.
- useLayoutEffect(saveDraft,[text,original,aiEdited,selected,downloaded,approved,stage,mode,autoFormat,photoChoiceMade,restored,key]);
+ useLayoutEffect(saveDraft,[text,original,aiEdited,needsDetail,selected,downloaded,approved,stage,mode,autoFormat,photoChoiceMade,restored,key]);
  useEffect(()=>{if(restored){heading.current?.focus({preventScroll:true});window.scrollTo({top:0,behavior:'instant'});}},[stage,restored,processing]);
  useEffect(()=>{if(!audio){setAudioURL('');return;}const u=URL.createObjectURL(audio);setAudioURL(u);return()=>URL.revokeObjectURL(u);},[audio]);
  function stop(){if(recordingTimer.current)clearInterval(recordingTimer.current);if(limitTimer.current)clearTimeout(limitTimer.current);if(recorder.current?.state==='recording'){setPreparation('transcribing');recorder.current.stop();}stream.current?.getTracks().forEach(t=>t.stop());setRecording(false);}
@@ -85,15 +88,16 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
  }
  async function prepareReview(draft:string,useAI:boolean){
   setEditingError('');setApproved(false);
-  if(!useAI||!capabilities.cleanup){setStage('check');return;}
+  if((!useAI&&!needsDetail)||!capabilities.cleanup){setStage('check');return;}
   setPreparation('formatting');
   try{const b=await api(`${base}/cleanup`,{method:'POST',body:JSON.stringify({text:draft})});
+   if(b.status==='needs_more_detail'||(typeof b.text==='string'&&isEditorFollowUp(b.text))){setNeedsDetail(true);setAiEdited(false);return;}
    if(typeof b.text!=='string'||!b.text.trim()||b.text.length>8000)throw Error('The AI edit could not be used. Your original wording is unchanged.');
-   setText(b.text);setAiEdited(true);
+   setText(b.text);setAiEdited(true);setNeedsDetail(false);
   }catch(e){setEditingError((e as Error).message);setAiEdited(false);}finally{setPreparation(null);setStage('check');}
  }
  function back(){if(stage==='compose')setStage('welcome');else if(stage==='check')setStage('compose');else if(stage==='photos')setStage('check');else if(stage==='share')setStage(approved&&job.photos.length?'photos':text?'check':'welcome');}
- function clear(){update('');setOriginal('');setAiEdited(false);setSelected(job.photos.map(p=>p.id));setDownloaded([]);setPhotoChoiceMade(false);setAutoFormat(true);setAudio(null);setStage('welcome');toast('Draft cleared on this device.');}
+ function clear(){update('');setOriginal('');setAiEdited(false);setNeedsDetail(false);setSelected(job.photos.map(p=>p.id));setDownloaded([]);setPhotoChoiceMade(false);setAutoFormat(true);setAudio(null);setStage('welcome');toast('Draft cleared on this device.');}
  const destinations=orderedPlatforms(job.source,job.links);
  const titles:Record<Stage,string>={welcome:publicGreeting(job.title),compose:mode==='voice'?'Speak your review':'Type your review',check:'Check your review',photos:'Add your project photos',share:'Ready to share'};
  const progress=stage==='compose'?0:stage==='check'?1:stage==='photos'?2:3;
@@ -126,13 +130,14 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
   {stage==='check'&&!processing&&<section className="panel stack">
    <p>{aiEdited?'We’ve tidied the wording. Please check that it reflects your experience and change anything you like.':'Read your review and change anything you like.'}</p>
    {editingError&&<div className="notice error" role="alert">{editingError} Your words are still here.</div>}
+   {needsDetail&&<div className="notice error" role="alert">{reviewNeedsDetailMessage}</div>}
    {editor}
    {original&&original!==text&&<><button className="secondary" disabled={processing} onClick={()=>{update(original);setAiEdited(false);}}><RotateCcw/>Use my original wording</button><details className="original-review"><summary>See my original wording</summary><blockquote>{original}</blockquote></details></>}
-   {capabilities.cleanup&&<button className="quiet" disabled={!text.trim()||processing} onClick={()=>check()}>{processing?<Loader2/>:<Sparkles/>}Check spelling & formatting again</button>}
+   {capabilities.cleanup&&<button className="quiet" disabled={!text.trim()||processing} onClick={()=>check(true)}>{processing?<Loader2/>:<Sparkles/>}Check spelling & formatting again</button>}
    {recordingControls}
-   {shortReview&&<div className="notice stack"><p>A short review is fine. Anything else about your experience you’d like to add?</p><button className="secondary" disabled={processing} onClick={()=>{setStage('compose');requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.setSelectionRange(text.length,text.length);});}}>Add more detail</button><small>Or tap Next to keep it short.</small></div>}
+   {shortReview&&!needsDetail&&<div className="notice stack"><p>A short review is fine. Anything else about your experience you’d like to add?</p><button className="secondary" disabled={processing} onClick={()=>{setStage('compose');requestAnimationFrame(()=>{textarea.current?.focus();textarea.current?.setSelectionRange(text.length,text.length);});}}>Add more detail</button><small>Or tap Next to keep it short.</small></div>}
    <small>By tapping Next, you confirm this text reflects your own experience.</small>
-   <button className="full" disabled={!text.trim()||processing} onClick={()=>{setApproved(true);setStage(job.photos.length?'photos':'share');}}>Next<ArrowRight/></button>
+   <button className="full" disabled={!text.trim()||processing||needsDetail} onClick={()=>{if(needsDetail)return;setApproved(true);setStage(job.photos.length?'photos':'share');}}>Next<ArrowRight/></button>
   </section>}
   {stage==='photos'&&<>
    <PhotoHandoff photos={job.photos} selected={selected} retryDownloads={downloaded.length>0} onSelect={ids=>{setSelected(ids);setPhotoChoiceMade(true);}} photoURL={id=>photoURL(id,true)} onContinue={()=>setStage('share')} onDownload={ids=>setDownloaded(previous=>[...new Set([...previous,...ids])])}/>

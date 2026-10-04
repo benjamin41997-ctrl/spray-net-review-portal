@@ -8,6 +8,24 @@ function environment():Env{
  return {DB:db as unknown as D1Database,ALLOWED_ORIGINS:portal,OPENAI_API_KEY:'fake-test-key',ENABLE_AI_CLEANUP:'true'};
 }
 const request=()=>new Request(`https://api.example.test/api/customer/${qr}/cleanup`,{method:'POST',headers:{Origin:portal,'Content-Type':'application/json'},body:JSON.stringify({text:'This was a training job. Finish looks good, but arrival was late.'})});
+test('editor clarification and refusals are separate from review text; short and negative reviews remain usable',async()=>{
+ const previous=globalThis.fetch;
+ try{
+  for(const content of [
+   {type:'output_text',text:JSON.stringify({status:'needs_more_detail',review:''})},
+   {type:'refusal',refusal:'Cannot edit this input.'},
+   {type:'output_text',text:'Could you share your notes about the project or your experience with Spray-Net South Charlotte?'},
+   {type:'output_text',text:JSON.stringify({status:'ready',review:'Could you share some project details?'})}
+  ]){
+   globalThis.fetch=(async()=>Response.json({status:'completed',output:[{content:[content]}]})) as typeof fetch;
+   const response=await handle(request(),environment());expect(response.status).toBe(200);const result=await response.json() as any;expect(result.status).toBe('needs_more_detail');expect(result.text).toBeUndefined();expect(result.message).toContain('short, honest review');
+  }
+  for(const review of ['Great job.','Disappointed.','Why did they leave a mess? Nobody replied to my follow-up.']){
+   globalThis.fetch=(async()=>Response.json({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({status:'ready',review})}]}]})) as typeof fetch;
+   const response=await handle(request(),environment());expect(await response.json()).toEqual({status:'ready',text:review});
+  }
+ }finally{globalThis.fetch=previous;}
+});
 test('server refuses truncated, empty, or oversized edits so criticism cannot be lost to truncation',async()=>{
  const previous=globalThis.fetch;
  try{
@@ -20,7 +38,7 @@ test('server refuses truncated, empty, or oversized edits so criticism cannot be
 test('AI receives only customer words and no response storage; independent flag and missing key prevent requests',async()=>{
  const previous=globalThis.fetch;let calls=0;
  try{
-  globalThis.fetch=(async(input:any,init:any)=>{calls++;expect(input).toBe('https://api.openai.com/v1/responses');const payload=JSON.parse(init.body);expect(payload.model).toBe('gpt-6.1-sol');expect(payload.reasoning).toEqual({effort:'low'});expect(payload.instructions).toBe(reviewEditingInstructions);expect(payload.input).toBe('This was a training job. Finish looks good, but arrival was late.');expect(payload.store).toBe(false);return Response.json({status:'completed',output:[{content:[{type:'output_text',text:payload.input}]}]});}) as typeof fetch;
+  globalThis.fetch=(async(input:any,init:any)=>{calls++;expect(input).toBe('https://api.openai.com/v1/responses');const payload=JSON.parse(init.body);expect(payload.model).toBe('gpt-6.1-sol');expect(payload.reasoning).toEqual({effort:'low'});expect(payload.instructions).toBe(reviewEditingInstructions);expect(payload.input).toBe('This was a training job. Finish looks good, but arrival was late.');expect(payload.store).toBe(false);expect(payload.text.format.strict).toBe(true);expect(payload.text.format.schema.properties.status.enum).toEqual(['ready','needs_more_detail']);return Response.json({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({status:'ready',review:payload.input})}]}]});}) as typeof fetch;
   expect((await handle(request(),{...environment(),ENABLE_AI_CLEANUP:'false'})).status).toBe(403);
   expect((await handle(request(),{...environment(),OPENAI_API_KEY:''})).status).toBe(403);expect(calls).toBe(0);
   const result=await handle(request(),environment());expect(result.status).toBe(200);expect((await result.json() as any).text).toContain('arrival was late');expect(calls).toBe(1);
@@ -30,7 +48,7 @@ test('AI receives only customer words and no response storage; independent flag 
 test('local Luna editing uses low reasoning and the same customer-only instructions',async()=>{
  const previous=globalThis.fetch;
  try{
-  globalThis.fetch=(async(_input:any,init:any)=>{const payload=JSON.parse(init.body);expect(payload.model).toBe('gpt-6-luna');expect(payload.reasoning).toEqual({effort:'low'});expect(payload.instructions).toBe(reviewEditingInstructions);expect(payload.store).toBe(false);expect(payload.input).toContain('training job');return Response.json({status:'completed',output:[{content:[{type:'output_text',text:payload.input}]}]});}) as typeof fetch;
+  globalThis.fetch=(async(_input:any,init:any)=>{const payload=JSON.parse(init.body);expect(payload.model).toBe('gpt-6-luna');expect(payload.reasoning).toEqual({effort:'low'});expect(payload.instructions).toBe(reviewEditingInstructions);expect(payload.store).toBe(false);expect(payload.input).toContain('training job');return Response.json({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({status:'ready',review:payload.input})}]}]});}) as typeof fetch;
   const result=await handle(request(),{...environment(),REVIEW_EDITOR_MODEL:'gpt-6-luna'});expect(result.status).toBe(200);expect((await result.json() as any).text).toContain('arrival was late');
  }finally{globalThis.fetch=previous;}
 });
@@ -38,7 +56,7 @@ test('local Luna editing uses low reasoning and the same customer-only instructi
 test('a configured legacy editor does not receive unsupported reasoning parameters',async()=>{
  const previous=globalThis.fetch;
  try{
-  globalThis.fetch=(async(_input:any,init:any)=>{const payload=JSON.parse(init.body);expect(payload.model).toBe('gpt-4.1-mini');expect(payload.reasoning).toBeUndefined();return Response.json({status:'completed',output:[{content:[{type:'output_text',text:payload.input}]}]});}) as typeof fetch;
+  globalThis.fetch=(async(_input:any,init:any)=>{const payload=JSON.parse(init.body);expect(payload.model).toBe('gpt-4.1-mini');expect(payload.reasoning).toBeUndefined();return Response.json({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({status:'ready',review:payload.input})}]}]});}) as typeof fetch;
   expect((await handle(request(),{...environment(),REVIEW_EDITOR_MODEL:'gpt-4.1-mini'})).status).toBe(200);
  }finally{globalThis.fetch=previous;}
 });

@@ -18,7 +18,7 @@ test('preview requests use Luna server-side and quota rejection prevents another
  const previous=globalThis.fetch;let calls=0;
  const request=()=>new Request(`https://api.example.test/api/customer/${token}/cleanup`,{method:'POST',headers:{Origin:portal,'Content-Type':'application/json'},body:JSON.stringify({text:'The crew was friendly, but arrived late.'})});
  try{
-  globalThis.fetch=(async(url:any,options:any)=>{calls++;expect(url).toBe('https://api.openai.com/v1/responses');const payload=JSON.parse(options.body);expect(payload.model).toBe('gpt-6-luna');expect(payload.reasoning).toEqual({effort:'low'});expect(payload.input).toBe('The crew was friendly, but arrived late.');return Response.json({status:'completed',output:[{content:[{type:'output_text',text:'The crew at Spray-Net South Charlotte was friendly, but arrived late.'}]}]});}) as typeof fetch;
+  globalThis.fetch=(async(url:any,options:any)=>{calls++;expect(url).toBe('https://api.openai.com/v1/responses');const payload=JSON.parse(options.body);expect(payload.model).toBe('gpt-6-luna');expect(payload.reasoning).toEqual({effort:'low'});expect(payload.input).toBe('The crew was friendly, but arrived late.');return Response.json({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({status:'ready',review:'The crew at Spray-Net South Charlotte was friendly, but arrived late.'})}]}]});}) as typeof fetch;
   const response=await handle(request(),environment());expect(response.status).toBe(200);expect((await response.json() as any).text).toContain('arrived late');expect(calls).toBe(1);
   expect((await handle(request(),environment(1,'active',true))).status).toBe(429);expect(calls).toBe(1);
  }finally{globalThis.fetch=previous;}

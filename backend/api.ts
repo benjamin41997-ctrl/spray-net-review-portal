@@ -3,6 +3,7 @@ import {createPortal,HttpError,platforms} from './portal';
 import {isLocal} from './auth';
 import {googleReviewURL} from '../lib/business';
 import {reviewEditingInstructions,transcriptionInstructions} from './review-editor';
+import {reviewResultFormat,reviewNeedsDetailMessage,isEditorFollowUp} from '../lib/review-result';
 function json(v:unknown,status=200){return Response.json(v,{status,headers:{'Cache-Control':'no-store','Referrer-Policy':'no-referrer'}});}
 export async function handle(r:Request,env:Env){const {db,bucket,requireAdmin,sameOrigin,body,clean,links,token,getJob,resolveQR,publicJob,settings,rate,event}=createPortal(env,r);try{const p=new URL(r.url).pathname.split('/').filter(Boolean).slice(1);const method=r.method;
  if(method!=='GET')sameOrigin(r);
@@ -70,14 +71,22 @@ export async function handle(r:Request,env:Env){const {db,bucket,requireAdmin,sa
      model,
      // Both selected GPT-6 editors support low effort; legacy models reject it.
      ...(['gpt-6.1-sol','gpt-6-luna'].includes(model)?{reasoning:{effort:'low'}}:{}),
-     instructions:reviewEditingInstructions,input:text,store:false,max_output_tokens:4000
+     instructions:reviewEditingInstructions,input:text,store:false,max_output_tokens:4000,text:{format:reviewResultFormat}
     }),signal:AbortSignal.timeout(45000)
    });
    if(!res.ok)throw new HttpError(502,'Editing is unavailable. Your original text is unchanged.');
    const result=await res.json() as any;
-   const edited=result.output?.flatMap((x:any)=>x.content||[]).filter((x:any)=>x.type==='output_text').map((x:any)=>x.text).join('\n');
-   if(result.status!=='completed'||!edited?.trim()||edited.length>8000)throw new HttpError(502,'The edit could not be completed. Your original text is unchanged.');
-   return json({text:edited});
+   const content=Array.isArray(result.output)?result.output.flatMap((x:any)=>Array.isArray(x.content)?x.content:[]):[];
+   const needsDetail=()=>json({status:'needs_more_detail',message:reviewNeedsDetailMessage});
+   if(result.status==='completed'&&content.some((x:any)=>x.type==='refusal'))return needsDetail();
+   const output=content.filter((x:any)=>x.type==='output_text').map((x:any)=>x.text).join('\n');
+   if(result.status!=='completed'||!output?.trim())throw new HttpError(502,'The edit could not be completed. Your original text is unchanged.');
+   if(isEditorFollowUp(output))return needsDetail();
+   let edited:any;try{edited=JSON.parse(output);}catch{throw new HttpError(502,'The edit could not be completed. Your original text is unchanged.');}
+   if(edited?.status==='needs_more_detail')return needsDetail();
+   if(edited?.status!=='ready'||typeof edited.review!=='string'||!edited.review.trim()||edited.review.length>8000)throw new HttpError(502,'The edit could not be completed. Your original text is unchanged.');
+   if(isEditorFollowUp(edited.review))return needsDetail();
+   return json({status:'ready',text:edited.review});
   }
  }
  throw new HttpError(404,'This action is unavailable.');
