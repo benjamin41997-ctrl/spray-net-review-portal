@@ -17,11 +17,14 @@ function links(input:unknown){if(!input||typeof input!=='object'||Array.isArray(
  const hosts:Record<string,string[]>= {google:['google.com','g.page','maps.app.goo.gl'],angi:['angi.com','angieslist.com','homeadvisor.com'],thumbtack:['thumbtack.com'],apple:['maps.apple.com'],yelp:['yelp.com']};
  if(u.protocol!=='https:'||u.username||u.password||u.port||!hosts[p].some(h=>u.hostname===h||u.hostname.endsWith('.'+h)))throw new HttpError(400,`Use an official ${p} HTTPS link.`);out[p]=u.href;}return out;}
 function token(){const a=new Uint8Array(24);crypto.getRandomValues(a);return btoa(String.fromCharCode(...a)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');}
-async function getJob(id:string):Promise<Job>{const j=await db().prepare('SELECT * FROM jobs WHERE id=?').bind(id).first<any>();if(!j)throw new HttpError(404,'This project could not be found.');
+async function getJob(id:string,ensureLink=false):Promise<Job>{const j=await db().prepare('SELECT * FROM jobs WHERE id=?').bind(id).first<any>();if(!j)throw new HttpError(404,'This project could not be found.');
+ if(ensureLink)await db().prepare('INSERT INTO customer_links(job_id,token,created_at) VALUES(?,?,?) ON CONFLICT(job_id) DO NOTHING').bind(id,token(),new Date().toISOString()).run();
+ const direct=await db().prepare('SELECT token FROM customer_links WHERE job_id=?').bind(id).first<{token:string}>();if(direct)j.customer_token=direct.token;
  j.links=JSON.parse(j.links);j.photos=(await db().prepare('SELECT id,job_id,label,kind,position,mime FROM photos WHERE job_id=? ORDER BY position,id').bind(id).all()).results;
  j.qrs=(await db().prepare('SELECT * FROM qr_codes WHERE job_id=? ORDER BY label').bind(id).all()).results;return j;}
 async function resolveQR(t:string,preview=false){if(!/^[A-Za-z0-9_-]{32}$/.test(t))throw new HttpError(404,'This page is unavailable.');const q=await db().prepare('SELECT * FROM qr_codes WHERE token=?').bind(t).first<QR>();
- if(!q||!q.job_id)throw new HttpError(404,q?.assigned_at?'This page is no longer available.':"This page isn’t ready yet.");const job=await getJob(q.job_id);
+ const direct=!q?await db().prepare('SELECT job_id FROM customer_links WHERE token=?').bind(t).first<{job_id:string}>():null;
+ if(!q?.job_id&&!direct)throw new HttpError(404,q?.assigned_at?'This page is no longer available.':"This page isn’t ready yet.");const job=await getJob(q?.job_id||direct!.job_id);
  if(job.status!=='active'&&!(preview&&await isAdmin()))throw new HttpError(404,job.status==='archived'?'This page is no longer available.':"This page isn’t ready yet.");return {q,job};}
 function publicJob(job:Job){return {id:job.id,title:job.title,source:job.source,demo:!!job.demo,links:job.links,photos:job.photos};}
 async function rate(key:string,max:number){const k=`${new Date().toISOString().slice(0,10)}:${key}`;

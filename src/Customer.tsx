@@ -11,7 +11,7 @@ import ReviewHandoff from './ReviewHandoff';
 import PhotoHandoff from './PhotoHandoff';
 import ReviewPreparation,{type PreparationPhase} from './ReviewPreparation';
 
-type CustomerJob={id:string;title:string;source:string;demo:boolean;links:Record<string,string>;photos:{id:string;kind:string;label:string}[]};
+type CustomerJob={id:string;title:string;source:string;demo:boolean;hasSticker?:boolean;links:Record<string,string>;photos:{id:string;kind:string;label:string}[]};
 type Stage='welcome'|'compose'|'check'|'photos'|'share'|'thanks';
 const stages:Stage[]=['welcome','compose','check','photos','share','thanks'];
 export default function Customer({token,initial:job,capabilities,preview,admin,jobPreview=false,staticDemo=false}:{token:string;initial:CustomerJob;capabilities:{transcription:boolean;cleanup:boolean};preview:boolean;admin:boolean;jobPreview?:boolean;staticDemo?:boolean}){
@@ -30,6 +30,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
  const recordingTimer=useRef<ReturnType<typeof setInterval>|null>(null);const limitTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
  const textarea=useRef<HTMLTextAreaElement>(null);const heading=useRef<HTMLHeadingElement>(null);
  const key=`spraynet-review:v1:${staticDemo?'public-demo':token}`;const base=`customer/${token}`;
+ const processingBase=jobPreview||preview&&!staticDemo?`admin/jobs/${job.id}`:base;
  const photoURL=(id:string,download=false)=>staticDemo?assetURL(`sample/${id}.webp`):remotePhotoURL(jobPreview?`admin/photos/${id}`:`${base}/photo/${id}`,{preview,download});
  function update(v:string){setText(v);setApproved(false);setEditingError('');}
  async function track(type:'visit'|'click',platform?:string){
@@ -68,7 +69,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
  async function transcribe(blob:Blob){
   setPreparation('transcribing');
   try{const form=new FormData();const ext=blob.type.includes('mp4')?'m4a':blob.type.includes('ogg')?'ogg':'webm';form.set('audio',new File([blob],`review.${ext}`,{type:blob.type}));
-   const b=await api(`${base}/transcribe`,{method:'POST',body:form});
+   const b=await api(`${processingBase}/transcribe`,{method:'POST',body:form});
    if(typeof b.text!=='string'||!b.text.trim())throw Error('No clear speech was detected. Please try again or type your review.');
    const draft=recordingBase.current?`${recordingBase.current}\n\n${b.text}`:b.text;if(draft.length>8000)throw Error('This transcript is too long. Save the recording below and shorten your draft before retrying.');
    setOriginal(draft);setAiEdited(false);update(draft);
@@ -95,7 +96,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
   setEditingError('');setApproved(false);
   if((!useAI&&!needsDetail)||!capabilities.cleanup){setStage('check');return;}
   setPreparation('formatting');
-  try{const b=await api(`${base}/cleanup`,{method:'POST',body:JSON.stringify({text:draft})});
+  try{const b=await api(`${processingBase}/cleanup`,{method:'POST',body:JSON.stringify({text:draft})});
    if(b.status==='needs_more_detail'||(typeof b.text==='string'&&isEditorFollowUp(b.text))){setNeedsDetail(true);setAiEdited(false);return;}
    if(typeof b.text!=='string'||!b.text.trim()||b.text.length>8000)throw Error('The AI edit could not be used. Your original wording is unchanged.');
    setText(b.text);setAiEdited(true);setNeedsDetail(false);
@@ -119,7 +120,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
  const editor=<label>Your review<textarea aria-label="Your review" ref={textarea} disabled={!restored||recording||processing} maxLength={8000} value={text} onChange={e=>update(e.target.value)} placeholder="Write in your own words…"/></label>;
  const branding=<div className="brand"><img src={assetURL('branding/logo.png')} alt="Spray-Net"/><p className="eyebrow">SOUTH CHARLOTTE</p></div>;
  return <main className={`customer-shell guided${stage==='welcome'?'':' compact-steps'}`}>
-  {admin&&!preview&&<div className="actions"><a className="text-link" href={adminLink({assign:token})}>Manage this sticker</a></div>}
+  {admin&&!preview&&job.hasSticker!==false&&<div className="actions"><a className="text-link" href={adminLink({assign:token})}>Manage this sticker</a></div>}
   <header className={stage==='welcome'?'welcome-header':'step-header'}>{stage!=='welcome'&&<button className="quiet back-button" disabled={recording||processing} onClick={back}><ArrowLeft/>Back</button>}{branding}</header>
   {stage!=='welcome'&&<ol className="review-progress" aria-label="Review steps">{['Write','Check','Photos','Share'].map((label,i)=><li key={label} aria-current={i===progress?'step':undefined} className={i===progress?'current':i<progress?'complete':''}><span>{i+1}</span>{label}</li>)}</ol>}
   <div className="intro"><h1 ref={heading} tabIndex={-1}>{processing?(preparation==='microphone'?'Connecting your microphone…':'Preparing your review…'):titles[stage]}</h1>{stage==='welcome'&&<p>A few simple steps to share your experience.</p>}</div>

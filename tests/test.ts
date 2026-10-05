@@ -9,5 +9,7 @@ export const test=base.extend({context:async({context},use)=>{
   await route.fulfill({headers:{'Access-Control-Allow-Origin':route.request().headers().origin||'*'},json:{text:body.text}});
  });
  await context.route('**/api/customer/*/transcribe',route=>route.fulfill({status:503,headers:{'Access-Control-Allow-Origin':route.request().headers().origin||'*'},json:{error:'Transcription is mocked for automated tests.'}}));
+ await context.route('**/api/admin/jobs/*/cleanup',route=>route.fulfill({headers:{'Access-Control-Allow-Origin':route.request().headers().origin||'*'},json:{text:route.request().postDataJSON().text}}));
+ await context.route('**/api/admin/jobs/*/transcribe',route=>route.fulfill({status:503,headers:{'Access-Control-Allow-Origin':route.request().headers().origin||'*'},json:{error:'Transcription is mocked for automated tests.'}}));
  await use(context);
 }});

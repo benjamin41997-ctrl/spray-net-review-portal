@@ -11,6 +11,10 @@ export const qrCodes = sqliteTable('qr_codes', {
   jobId: text('job_id').references(() => jobs.id, { onDelete: 'set null' }),
   assignedAt: text('assigned_at'), createdAt: text('created_at').notNull(),
 }, t => [index('idx_qr_job').on(t.jobId), index('idx_qr_batch').on(t.batchId)]);
+export const customerLinks = sqliteTable('customer_links', {
+  jobId: text('job_id').primaryKey().references(() => jobs.id, { onDelete: 'cascade' }),
+  token: text('token').notNull().unique(), createdAt: text('created_at').notNull(),
+});
 export const photos = sqliteTable('photos', {
   id: text('id').primaryKey(), jobId: text('job_id').notNull().references(() => jobs.id, { onDelete: 'cascade' }),
   objectKey: text('object_key').notNull(), label: text('label').notNull(),

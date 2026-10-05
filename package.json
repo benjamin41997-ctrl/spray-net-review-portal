@@ -12,7 +12,7 @@
     "db:generate": "drizzle-kit generate",
     "backend:dev": "wrangler dev --config wrangler.local.jsonc --local --persist-to .wrangler/state --ip 127.0.0.1 --port 8787 --inspector-port 0",
     "typecheck": "tsc --noEmit",
-    "db:local": "wrangler d1 execute DB --local --config wrangler.local.jsonc --persist-to .wrangler/state --file drizzle/0000_high_rictor.sql",
+    "db:local": "node --import ./scripts/runtime-env.mjs scripts/local-database.mjs",
     "backend:build": "node --import ./scripts/runtime-env.mjs ./node_modules/wrangler/bin/wrangler.js deploy --dry-run --config wrangler.jsonc --outdir dist/api",
     "install:ci": "npm ci --no-audit --no-fund"
   },

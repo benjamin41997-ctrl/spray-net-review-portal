@@ -23,3 +23,17 @@ test('preview requests use Luna server-side and quota rejection prevents another
   expect((await handle(request(),environment(1,'active',true))).status).toBe(429);expect(calls).toBe(1);
  }finally{globalThis.fetch=previous;}
 });
+
+test('authenticated draft-job preview can edit and transcribe without a QR, while public requests are rejected',async()=>{
+ const env={...environment(0,'draft'),ENVIRONMENT:'local',LOCAL_ADMIN_TOKEN:'test-preview-admin',ALLOWED_ORIGINS:'http://127.0.0.1:5173'};
+ const previous=globalThis.fetch;let calls=0;
+ try{
+  globalThis.fetch=(async(url:any)=>{calls++;if(url==='https://api.openai.com/v1/audio/transcriptions')return Response.json({text:'The crew arrived late, but the cabinets look good.'});expect(url).toBe('https://api.openai.com/v1/responses');return Response.json({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({status:'ready',review:'The crew was friendly.'})}]}]});}) as typeof fetch;
+  const cleanup=(authorized:boolean)=>new Request('http://127.0.0.1:8787/api/admin/jobs/preview-job/cleanup',{method:'POST',headers:{Origin:env.ALLOWED_ORIGINS,'Content-Type':'application/json',...(authorized?{Authorization:'Bearer '+env.LOCAL_ADMIN_TOKEN}:{})},body:JSON.stringify({text:'crew friendly'})});
+  expect((await handle(cleanup(false),env)).status).toBe(403);expect(calls).toBe(0);
+  const edited=await handle(cleanup(true),env);expect(edited.status).toBe(200);expect(await edited.json()).toEqual({status:'ready',text:'The crew was friendly.'});
+  const form=new FormData();form.set('audio',new File(['test recording'],'review.webm',{type:'audio/webm'}));
+  const transcribed=await handle(new Request('http://127.0.0.1:8787/api/admin/jobs/preview-job/transcribe',{method:'POST',headers:{Origin:env.ALLOWED_ORIGINS,Authorization:'Bearer '+env.LOCAL_ADMIN_TOKEN},body:form}),env);
+  expect(transcribed.status).toBe(200);expect((await transcribed.json() as any).text).toContain('arrived late');expect(calls).toBe(2);
+ }finally{globalThis.fetch=previous;}
+});

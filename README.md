@@ -18,6 +18,8 @@ https://benjamin41997-ctrl.github.io/spray-net-review-portal/?code=RANDOM_TOKEN
 
 The static application asks the secure backend which job belongs to that token and displays the matching photos/review options. You can generate 100 stickers, grab any unused one, assign it later, and keep updating the original job. Assignment is permanent; deleted jobs retire their codes. Tokens have 192 bits of randomness. This uses one reusable page and needs no GitHub redirects or rewrite rules.
 
+Each project also has a separate permanent customer link for email/text, displayed directly below **Preview project layout** with **Copy customer link**. It uses its own random token in `customer_links`, does not consume a sticker, and applies the same activation, photo access, archiving, and deletion controls. Existing projects receive this link when an administrator opens them. Layout previews use the backend's actual AI capabilities and administrator-authenticated editing/transcription routes, including for draft projects without stickers. Preview processing uses real API credits when connected; preview visits/clicks are not counted as customer activity.
+
 The printed link points to GitHub Pages even if the backend moves. Update the public configuration and migrate the database/photos while preserving token assignments. Keep the GitHub account, repository name/path, and published page available. Check the Pages deployment in GitHub Actions for the current publishing status. **The online preview is for device testing; live customer stickers require the hosted backend and production token assignments.**
 
 ## Online device preview
