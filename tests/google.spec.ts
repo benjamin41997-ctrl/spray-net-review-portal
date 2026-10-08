@@ -88,6 +88,25 @@ test('native browser clipboard can copy before opening the new review tab',async
   if(test.info().project.name==='chromium'){await page.context().grantPermissions(['clipboard-read']);expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe('A genuine short review.');}
  }finally{await admin.delete('/api/admin/jobs/'+j.id);}
 });
+
+test('Google waits for clipboard acceptance before navigating the reserved tab',async({page})=>{
+ const {j,code}=await project();try{
+  await page.addInitScript(()=>{
+   document.execCommand=()=>false;
+   Object.defineProperty(navigator,'clipboard',{value:{writeText:(text:string)=>new Promise<void>(resolve=>{
+    (window as any).finishCopy=()=>{sessionStorage.setItem('qa-copied-text',text);resolve();};
+   })}});
+  });
+  await page.context().route(googleReviewURL,r=>r.fulfill({body:'Mock Google; nothing posted.'}));
+  await page.goto(site+'?code='+code);await startDraft(page);const text='The finish looks good. Scheduling could improve.';
+  await page.getByLabel('Your review',{exact:true}).fill(text);await approveReview(page);
+  const opening=page.waitForEvent('popup');await page.getByRole('button',{name:'Paste my review to Google',exact:true}).click();const tab=await opening;
+  await expect(tab).toHaveURL('about:blank');expect(await page.evaluate(()=>sessionStorage.getItem('qa-copied-text'))).toBeNull();expect((await row(j.id)).clicks).toBe(0);
+  await page.evaluate(()=>(window as any).finishCopy());await expect(tab).toHaveURL(googleReviewURL);
+  expect(await page.evaluate(()=>sessionStorage.getItem('qa-copied-text'))).toBe(text);
+  await tab.close();await expect(page.getByText('Review copied. Paste it into your Google review.',{exact:true})).toBeVisible();
+ }finally{await admin.delete('/api/admin/jobs/'+j.id);}
+});
 test('customer can move straight from Google to a second site without confirming or leaving the portal',async({page})=>{
  const {j,code}=await project({angi:fixture.links.angi});try{
   await page.addInitScript(()=>Object.defineProperty(navigator,'clipboard',{value:{writeText:async(text:string)=>sessionStorage.setItem('qa-copied-text',text)}}));

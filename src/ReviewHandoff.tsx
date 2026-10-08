@@ -2,6 +2,8 @@ import {useEffect,useRef,useState} from 'react';
 import {Copy,Loader2} from 'lucide-react';
 import {platformNames} from '@/lib/client';
 import {copyReviewText} from '@/lib/review-clipboard';
+import {isAppleMobile} from '@/lib/photo-save';
+import {toast} from 'sonner';
 
 export default function ReviewHandoff({platform,url,text,approved,photoCount,includePhotos,saveDraft,onContinue,onManualCopy,progress,previewOnly=false}:{platform:'google'|'angi'|'thumbtack';url:string;text:string;approved:boolean;photoCount:number;includePhotos:boolean;saveDraft:()=>void;onContinue:()=>Promise<void>;onManualCopy:()=>void;progress?:'opened'|'reported';previewOnly?:boolean}){
  const name=platformNames[platform];
@@ -29,13 +31,13 @@ export default function ReviewHandoff({platform,url,text,approved,photoCount,inc
   if(previewOnly){setBusy(false);setPreviewNotice(`${failed?'This sample preview stops here.':'Review copied. This sample preview stops here;'} ${name} will open from a real customer page. Please don’t post sample feedback.`);return;}
   setBusy(false);
   if(!tab||tab.closed){setTabBlocked(true);return;}
-  try{tab.location.replace(url);void onContinue();}catch{tab.close();setTabBlocked(true);}
+  try{if(!failed)toast.success(`Review copied. Paste it into your ${name} review.`);tab.location.replace(url);void onContinue();}catch{tab.close();setTabBlocked(true);}
  }
  return <div className="stack">
   {platform==='google'&&approved&&!!text.trim()&&(!progress||failed)&&<ol className="google-steps" aria-label="How to post your Google review">
    <li>{failed?'Copy the selected review below, then press “Continue to Google”.':'Press “Paste my review to Google” below.'}</li>
    <li>Sign in to Google if prompted.</li>
-   <li>{failed?'Paste the review you copied.':'Paste your review. It is automatically copied for you.'}</li>
+   <li>{failed?'Paste the review you copied.':'Paste your review. It is automatically copied for you.'}{isAppleMobile()&&' Press and hold the review box, then tap Paste.'}</li>
    <li>{includePhotos?`Attach the ${photoCount} transformation photo${photoCount===1?'':'s'} you already downloaded.`:'You can post without photos.'}</li>
    <li>Confirm everything looks correct, choose your rating, and press “Post”.</li>
   </ol>}

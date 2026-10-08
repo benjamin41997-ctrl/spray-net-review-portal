@@ -7,6 +7,7 @@ import {api,orderedPlatforms,platformNames,saveFile} from '@/lib/client';
 import {adminLink,assetURL,photoURL as remotePhotoURL} from '@/lib/urls';
 import {publicGreeting} from '@/lib/greeting';
 import {isEditorFollowUp,reviewNeedsDetailMessage} from '@/lib/review-result';
+import {isAppleMobile} from '@/lib/photo-save';
 import ReviewHandoff from './ReviewHandoff';
 import PhotoHandoff from './PhotoHandoff';
 import ReviewPreparation,{type PreparationPhase} from './ReviewPreparation';
@@ -162,7 +163,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
     {handoff(p)}
    </div>)}
    <div className="share-extras">
-    {selected.some(id=>downloaded.includes(id))&&<small role="status">Photo downloads requested. If your browser asks, allow multiple downloads. Look in Downloads or Files.</small>}
+    {selected.some(id=>downloaded.includes(id))&&<small role="status">{isAppleMobile()?'If you chose Save Images, find your pictures in Photos. For individual downloads, check Downloads in Files.':'Photo downloads requested. If your browser asks, allow multiple downloads. Look in Downloads or Files.'}</small>}
     {selected.length>0&&<button className="quiet" onClick={()=>setStage('photos')}>Save photos again</button>}
     {reviewDetails}
    </div>

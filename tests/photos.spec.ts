@@ -11,6 +11,7 @@ test.beforeEach(async({page})=>{
  // Ordinary download tests cover browsers without a desktop save picker.
  // Explicit picker tests install their own deterministic native-dialog stub.
  await page.addInitScript(()=>Object.defineProperty(window,'showSaveFilePicker',{value:undefined,configurable:true}));
+ await page.addInitScript(()=>{Object.defineProperty(navigator,'userAgent',{value:'Portal QA download browser',configurable:true});Object.defineProperty(navigator,'platform',{value:'QA',configurable:true});});
  job=await(await admin.post('/api/admin/jobs',{data:{...fixture,source:'training',links:{}}})).json();
  for(const [kind,label,background] of [['before','Before cabinets','#ed2222'],['after','Finished cabinets','#2222ed'],['detail','Optional detail','#22ed22']]){
   const buffer=await sharp({create:{width:400,height:300,channels:3,background}}).png().toBuffer();
@@ -20,7 +21,78 @@ test.beforeEach(async({page})=>{
  await admin.post('/api/admin/assign',{data:{job_id:job.id,token:code}});job=await(await patch(admin,job,'active')).json();
 });
 test.afterEach(async()=>{if(job?.id)await admin.delete('/api/admin/jobs/'+job.id);});
-async function photos(page:any){await page.goto(site+'?code='+code);await startDraft(page);await page.getByLabel('Your review',{exact:true}).fill('My own feedback.');await approveReview(page);}
+async function appleMenu(page:any,mode:string){
+ await page.evaluate((mode:string)=>{
+  Object.defineProperty(navigator,'userAgent',{value:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)',configurable:true});
+  Object.defineProperty(navigator,'platform',{value:'iPhone',configurable:true});
+  const state={mode,calls:[] as {files:{name:string;type:string;size:number}[];active:boolean|undefined}[]};(window as any).appleQA=state;
+  Object.defineProperty(navigator,'canShare',{configurable:true,value:()=>state.mode!=='unsupported'});
+  Object.defineProperty(navigator,'share',{configurable:true,value:async({files}:{files:File[]})=>{
+   state.calls.push({files:files.map(f=>({name:f.name,type:f.type,size:f.size})),active:navigator.userActivation?.isActive});
+   if(state.mode==='cancel')throw new DOMException('Canceled','AbortError');
+   if(state.mode==='denied')throw new DOMException('Unavailable','NotAllowedError');
+   if(state.mode==='pending')await new Promise(()=>{});
+  }});
+ },mode);
+}
+async function photos(page:any,appleMode?:string){await page.goto(site+'?code='+code);if(appleMode)await appleMenu(page,appleMode);await startDraft(page);await page.getByLabel('Your review',{exact:true}).fill('My own feedback.');await approveReview(page);}
+
+test('iPhone sends all prepared JPEGs to one native photo menu in the original tap',async({page})=>{
+ const downloads:Download[]=[];page.on('download',d=>downloads.push(d));await photos(page,'success');
+ await expect(page.getByText(/On iPhone, choose “Save Images”/)).toBeVisible();
+ await page.getByRole('button',{name:'Save and share all photos',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Ready to share',exact:true})).toBeVisible();
+ const {calls}=await page.evaluate(()=>(window as any).appleQA);expect(calls).toHaveLength(1);
+ expect(calls[0].files.map((f:any)=>f.name)).toEqual(['Spray-Net-before-01.jpg','Spray-Net-after-02.jpg','Spray-Net-detail-03.jpg']);
+ expect(calls[0].files.every((f:any)=>f.type==='image/jpeg'&&f.size>0)).toBe(true);
+ if(calls[0].active!==undefined)expect(calls[0].active).toBe(true);
+ expect(downloads).toHaveLength(0);await expect(page.getByRole('status')).toContainText('If you chose Save Images');
+ await page.getByRole('button',{name:'Save photos again',exact:true}).click();
+ await page.getByRole('button',{name:'Save and share all photos',exact:true}).click();
+ expect(await page.evaluate(()=>(window as any).appleQA.calls.length)).toBe(2);
+});
+
+test('iPhone selected files and private saves preserve the customer’s photo choices',async({page})=>{
+ await photos(page,'success');await page.getByRole('button',{name:'Select photos to include and save',exact:true}).click();
+ await page.getByRole('checkbox',{name:'Select Before cabinets'}).uncheck();await page.getByRole('checkbox',{name:'Select Optional detail'}).uncheck();
+ await page.getByRole('button',{name:'Download selected photos (1)',exact:true}).click();
+ expect(await page.evaluate(()=>(window as any).appleQA.calls[0].files.map((f:any)=>f.name))).toEqual(['Spray-Net-after-02.jpg']);
+ await page.getByRole('button',{name:'Back',exact:true}).click();await page.getByRole('button',{name:skipPhotoLabel,exact:true}).click();
+ await page.getByRole('button',{name:'Download photos for myself',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Add your project photos',exact:true})).toBeVisible();
+ const draft=await page.evaluate(code=>JSON.parse(localStorage.getItem('spraynet-review:v1:'+code)!),code);expect(draft.selected).toEqual([]);
+ expect(await page.evaluate(()=>(window as any).appleQA.calls[1].files.length)).toBe(3);
+ await page.getByRole('button',{name:'Next',exact:true}).click();await expect(page.getByText('You can post without photos.',{exact:true})).toBeVisible();
+});
+
+test('canceling the iPhone photo menu keeps the photo screen and allows a fresh retry',async({page})=>{
+ await photos(page,'cancel');const save=page.getByRole('button',{name:'Save and share all photos',exact:true});await save.click();
+ await expect(page.getByRole('status')).toContainText('Photo saving canceled');await expect(save).toBeEnabled();
+ await expect(page.getByRole('heading',{name:'Add your project photos',exact:true})).toBeVisible();
+ expect(await page.evaluate(code=>JSON.parse(localStorage.getItem('spraynet-review:v1:'+code)!).downloaded,code)).toEqual([]);
+ await page.evaluate(()=>{(window as any).appleQA.mode='success';});await save.click();
+ await expect(page.getByRole('heading',{name:'Ready to share',exact:true})).toBeVisible();expect(await page.evaluate(()=>(window as any).appleQA.calls.length)).toBe(2);
+});
+
+for(const mode of ['unsupported','denied'])test(`iPhone ${mode} photo menu immediately offers individual saves without a burst or automatic advance`,async({page})=>{
+ const downloads:Download[]=[];page.on('download',d=>downloads.push(d));await photos(page,mode);
+ await page.getByRole('button',{name:'Save and share all photos',exact:true}).click();
+ const fallback=page.getByLabel('Save photos individually');await expect(fallback).toBeVisible();
+ await expect(fallback.getByRole('button',{name:/^Save /})).toHaveCount(3);expect(downloads).toHaveLength(0);
+ expect((await new AxeBuilder({page}).analyze()).violations).toEqual([]);
+ await page.screenshot({path:`.sites-runtime/qa/apple-photo-fallback-${mode}-${test.info().project.name}.png`,fullPage:true});
+ const d=page.waitForEvent('download');await fallback.getByRole('button',{name:'Save Before cabinets',exact:true}).click();
+ expect((await d).suggestedFilename()).toBe('Spray-Net-before-01.jpg');expect(downloads).toHaveLength(1);
+ await expect(page.getByRole('heading',{name:'Add your project photos',exact:true})).toBeVisible();
+ await fallback.getByRole('button',{name:'Next',exact:true}).click();await expect(page.getByRole('heading',{name:'Ready to share',exact:true})).toBeVisible();
+});
+
+test('a native photo menu that never settles still lets the customer continue after returning',async({page})=>{
+ await photos(page,'pending');await page.getByRole('button',{name:'Save and share all photos',exact:true}).click();
+ await expect(page.getByText(/If the menu has closed and this page is still waiting/)).toBeVisible();
+ await page.getByRole('button',{name:'Next',exact:true}).click();await expect(page.getByRole('heading',{name:'Ready to share',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Save photos again',exact:true}).click();await expect(page.getByRole('button',{name:'Save and share all photos',exact:true})).toBeEnabled();
+});
 
 test('exactly three photo choices; Share all initiates all JPEG downloads without a share sheet',async({page})=>{
  await page.addInitScript(()=>Object.defineProperty(navigator,'share',{value:()=>{throw Error('The share menu must not be used.');}}));
