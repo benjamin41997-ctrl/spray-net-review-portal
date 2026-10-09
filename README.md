@@ -64,7 +64,7 @@ The local database is already migrated. Apply the SQL only once on a new databas
 | Protected API | Standalone Cloudflare Worker, `backend/worker.ts`. It can now be hosted independently of Sites. |
 | Project/QR/activity records | Private Cloudflare D1 database, with the existing SQL schema and permanent assignment protections. |
 | Project photos | Private R2 bucket; the API checks access before serving each image. |
-| Administrator sign-in | Supabase email magic links. The Worker verifies the access token with Supabase's Auth server and checks a confirmed, non-anonymous email against its own allowlist. |
+| Administrator sign-in | Supabase email code entry is prepared locally; production still uses magic links until custom email delivery and the OTP template are connected. The Worker verifies the access token with Supabase's Auth server and checks a confirmed, non-anonymous email against its own allowlist. |
 | Customer drafts | Browser-local storage for up to 30 days, with no customer registration. |
 
 The workspace already contains a Supabase project used by the networking app. Its authentication can be reused after reviewing that project's settings. This build has not modified it, created accounts, sent invitations, or sent sign-in emails. Supabase handles identity only; review data/photos stay in D1/R2. The split retains the tested database/storage implementation but means maintaining Supabase and Cloudflare configuration as well as GitHub Pages.
@@ -95,6 +95,14 @@ The configuration script rejects credentials in URLs and private Supabase keys. 
 6. Set GitHub repository variables `REVIEW_API_BASE_URL`, `REVIEW_SUPABASE_URL`, and `REVIEW_SUPABASE_PUBLISHABLE_KEY`. These values are public. The Pages workflow computes the portal URL/repository base path and requires complete connection settings when a backend URL is supplied or connected mode is requested.
 7. Run **Publish review portal to GitHub Pages**, or push the next interface update. Only `dist/site` is uploaded; the Worker, database files, credentials, customer records, and local test sheets are excluded.
 8. Test the actual hosted email sign-in, job creation/assignment, photo saving, native platform links, and optional transcription. Print and scan one live sticker at 100% scale on the intended stock before distributing a batch.
+
+### Email-code sign-in rollout (pending email delivery setup)
+
+When enabled, the code-entry form requests a Supabase email OTP and verifies it with `verifyOtp({email,token,type:'email'})`. It keeps the entered email and resend cooldown in session storage across refresh, never stores an unverified code, and does not resend automatically. Successful verification retains the existing Supabase session and the same admin allowlist. Existing emailed links remain compatible during rollout.
+
+Code entry is enabled only with public configuration `adminEmailCodes:true` (GitHub variable `REVIEW_ADMIN_EMAIL_CODES=true`). Leave this unset until SMTP and the code template are configured; the existing email-link interface stays available. This rollout flag changes the form only, never server authorization.
+
+Before publishing this form, configure custom SMTP for **Spray-Net Review Portal**, not the separate partner project. The free project's default email service currently locks template editing. Set the **Magic link or OTP** subject to **Your Spray-Net admin sign-in code** and body to [the prepared template](supabase/templates/magic-link.html), containing `{{ .Token }}` rather than a confirmation link. SMTP secrets belong in Supabase settings, never this repository. With Resend, verify a sender domain you control, then follow [Resend's Supabase SMTP setup](https://resend.com/docs/send-with-supabase-smtp). Test delivery and sign-in for approved admins before switching the live interface. Automated provider stubs validate verification, persisted sessions, expired codes, cooldowns, delivery errors, and server authorization; they send no real emails.
 
 `npm run backend:build` is a **dry run** that produces `dist/api` without deploying. No automated backend deployment or paid-service provisioning is included. The static build and Worker bundle are both prepared and checked locally.
 
