@@ -2,7 +2,6 @@ import {readFile,writeFile} from 'node:fs/promises';
 const config=JSON.parse(await readFile('public/portal-config.json','utf8'));
 const mapping={REVIEW_API_BASE_URL:'apiBaseURL',REVIEW_PORTAL_URL:'portalURL',REVIEW_SUPABASE_URL:'supabaseURL',REVIEW_SUPABASE_PUBLISHABLE_KEY:'supabasePublishableKey'};
 for(const [name,key] of Object.entries(mapping))if(process.env[name])config[key]=process.env[name];
-if(process.env.REVIEW_ADMIN_EMAIL_CODES)config.adminEmailCodes=process.env.REVIEW_ADMIN_EMAIL_CODES==='true';
 config.localPreview=false;
 for(const key of ['apiBaseURL','portalURL','supabaseURL']){if(!config[key])continue;const url=new URL(config[key]);if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash)throw Error(`${key} must be a public HTTPS URL without credentials, query, or fragment.`);}
 if(config.supabasePublishableKey.startsWith('sb_secret_'))throw Error('Private Supabase keys must never be included in Pages.');

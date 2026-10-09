@@ -46,7 +46,6 @@ jobs:
           REVIEW_PORTAL_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
           REVIEW_SUPABASE_URL: ${{ vars.REVIEW_SUPABASE_URL }}
           REVIEW_SUPABASE_PUBLISHABLE_KEY: ${{ vars.REVIEW_SUPABASE_PUBLISHABLE_KEY }}
-          REVIEW_ADMIN_EMAIL_CODES: ${{ vars.REVIEW_ADMIN_EMAIL_CODES }}
       - run: npm run typecheck
       - run: npm run build
         env:

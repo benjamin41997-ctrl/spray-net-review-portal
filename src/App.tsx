@@ -3,8 +3,9 @@ const Admin=lazy(()=>import('./admin/Admin'));
 const Customer=lazy(()=>import('./Customer'));
 import {api} from '@/lib/client';
 import {getConfig} from '@/lib/config';
-import {getAccessToken,signOut} from '@/lib/auth';
+import {getAccessToken,signOut,needsPasswordSetup} from '@/lib/auth';
 import AdminSignIn from './AdminSignIn';
+import AdminPassword from './AdminPassword';
 import {adminLink,assetURL} from '@/lib/urls';
 import {googleReviewURL} from '@/lib/business';
 
@@ -20,6 +21,7 @@ export default function App(){const params=new URLSearchParams(location.search);
  if(adminRequested&&!signedIn&&!error)return <SignIn/>;
  if(error)return <Message title={adminRequested?'Administrator access unavailable':error}><p>{adminRequested?error:'Please contact your Spray-Net team if you need help with your project card.'}</p>{adminRequested&&<button className="secondary" onClick={()=>signOut().then(()=>location.reload())}>Use another account</button>}<button className="quiet" onClick={()=>location.reload()}>Try again</button></Message>;
  if(!loaded)return <main className="entry"><p role="status">Loading your page…</p></main>;
+ if(loaded.admin&&signedIn&&(params.get('password')==='1'||needsPasswordSetup()))return <Message title="Set your admin password."><AdminPassword/></Message>;
  if(loaded.admin)return <Admin/>;
  if(loaded.entry)return <Message title="Your project. Your experience."><p>Scan your project card to see your photos and share your experience.</p><a className="button secondary" href={adminLink()}>Administrator sign-in</a></Message>;
  return <Customer token={loaded.staticDemo?(loaded.previewToken||'public-demo'):previewJob?'preview-'+previewJob:code!} initial={loaded.job} capabilities={loaded.settings} preview={!!loaded.staticDemo||!!previewJob||preview&&signedIn} admin={signedIn&&!previewJob} jobPreview={!!previewJob} staticDemo={!!loaded.staticDemo}/>;
