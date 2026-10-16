@@ -8,6 +8,7 @@ import AdminSignIn from './AdminSignIn';
 import AdminPassword from './AdminPassword';
 import {adminLink,assetURL} from '@/lib/urls';
 import {googleReviewURL} from '@/lib/business';
+import PageLoading from './PageLoading';
 
 const publicSample={id:'public-sample',title:'We loved working with you, Sam!',source:'training',demo:true,links:{google:googleReviewURL},photos:[{id:'before',kind:'before',label:'Before · Spray-Net network sample'},{id:'after',kind:'after',label:'After · Spray-Net network sample'}]};
 
@@ -20,7 +21,7 @@ export default function App(){const params=new URLSearchParams(location.search);
  }catch(e){if(live)setError((e as Error).message);}})();return()=>{live=false;};},[]);
  if(adminRequested&&!signedIn&&!error)return <SignIn/>;
  if(error)return <Message title={adminRequested?'Administrator access unavailable':error}><p>{adminRequested?error:'Please contact your Spray-Net team if you need help with your project card.'}</p>{adminRequested&&<button className="secondary" onClick={()=>signOut().then(()=>location.reload())}>Use another account</button>}<button className="quiet" onClick={()=>location.reload()}>Try again</button></Message>;
- if(!loaded)return <main className="entry"><p role="status">Loading your page…</p></main>;
+ if(!loaded)return <PageLoading/>;
  if(loaded.admin&&signedIn&&(params.get('password')==='1'||needsPasswordSetup()))return <Message title="Set your admin password."><AdminPassword/></Message>;
  if(loaded.admin)return <Admin/>;
  if(loaded.entry)return <Message title="Your project. Your experience."><p>Scan your project card to see your photos and share your experience.</p><a className="button secondary" href={adminLink()}>Administrator sign-in</a></Message>;
