@@ -4,6 +4,7 @@ import {isLocal} from './auth';
 import {googleReviewURL} from '../lib/business';
 import {reviewEditingInstructions,transcriptionInstructions} from './review-editor';
 import {reviewResultFormat,reviewNeedsDetailMessage,isEditorFollowUp} from '../lib/review-result';
+import {readDraft,writeDraft} from './drafts';
 function json(v:unknown,status=200){return Response.json(v,{status,headers:{'Cache-Control':'no-store','Referrer-Policy':'no-referrer'}});}
 export async function handle(r:Request,env:Env){const {db,bucket,requireAdmin,sameOrigin,body,clean,links,token,getJob,resolveQR,publicJob,settings,rate,event}=createPortal(env,r);try{const p=new URL(r.url).pathname.split('/').filter(Boolean).slice(1);const method=r.method;
  if(method!=='GET')sameOrigin(r);
@@ -58,6 +59,14 @@ export async function handle(r:Request,env:Env){const {db,bucket,requireAdmin,sa
  const jobPreview=p[0]==='admin'&&p[1]==='jobs'&&!!p[2]&&['transcribe','cleanup'].includes(p[3])&&method==='POST';
  if(p[0]==='customer'&&p[1]||jobPreview){const t=jobPreview?'admin-preview-'+p[2]:p[1];const action=jobPreview?p[3]:p[2];const {job,q}=jobPreview?{job:await getJob(p[2]),q:null}:await resolveQR(t,new URL(r.url).searchParams.get('preview')==='1');
   if(method==='GET'&&!p[2])return json({...publicJob(job),hasSticker:!!q,settings:{transcription:settings().transcription,cleanup:settings().cleanup}});
+  if(action==='draft'&&p.length===3){
+   if(job.demo||job.status!=='active'||new URL(r.url).searchParams.has('preview'))throw new HttpError(404,'Draft syncing is unavailable for this page.');
+   if(method==='GET')return json(await readDraft(db(),job.id));
+   if(method==='PATCH'){
+    const updated=await writeDraft(db(),job.id,await body(r));
+    return updated?json(updated):json(await readDraft(db(),job.id),409);
+   }
+  }
   if(p[2]==='photo'&&method==='GET'){const photo=await db().prepare('SELECT * FROM photos WHERE id=? AND job_id=?').bind(p[3],job.id).first<any>();if(!photo)throw new HttpError(404,'Photo unavailable.');const obj=await bucket().get(photo.object_key);if(!obj)throw new HttpError(404,'Photo unavailable.');const download=new URL(r.url).searchParams.has('download');return new Response(obj.body,{headers:{'Content-Type':photo.mime,'Cache-Control':'no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff',...(download?{'Content-Disposition':`attachment; filename="spray-net-${photo.kind}-${photo.id.slice(0,8)}.${photo.mime==='image/jpeg'?'jpg':photo.mime==='image/png'?'png':'webp'}"`}:{})}});}
   if(p[2]==='event'&&method==='POST'){if(new URL(r.url).searchParams.has('preview'))return json({saved:false});const b=await body(r);if(!['visit','click','reported'].includes(b.type)||!/^[-a-f0-9]{36}$/.test(b.id)|| (b.type!=='visit'&&!platforms.includes(b.platform)) || (b.type!=='visit'&&!job.links[b.platform]))throw new HttpError(400,'Invalid activity.');await rate(`events:${t}`,200);await event(job.id,b.id,b.type,b.platform||null);return json({saved:true});}
   if(action==='transcribe'&&method==='POST'){if(!settings().transcription)throw new HttpError(503,'Voice transcription is not connected yet. You can type or use your phone keyboard’s microphone.');if(+(r.headers.get('content-length')||0)>10*1024*1024)throw new HttpError(413,'Keep recordings under two minutes.');const b=await r.formData();const f=b.get('audio');if(!(f instanceof File)||f.size>9*1024*1024||!['audio/webm','audio/mp4','audio/ogg','audio/wav','video/webm','video/mp4'].includes(f.type.split(';')[0]))throw new HttpError(400,'Unsupported recording.');await rate(`transcribe:${t}`,15);await rate('transcribe:global',100);const form=new FormData();form.set('file',f);form.set('model',env.TRANSCRIPTION_MODEL||'gpt-transcribe');form.set('prompt',transcriptionInstructions);const res=await fetch('https://api.openai.com/v1/audio/transcriptions',{method:'POST',headers:{Authorization:`Bearer ${env.OPENAI_API_KEY}`},body:form,signal:AbortSignal.timeout(60000)});if(!res.ok)throw new HttpError(502,'Transcription could not finish. Your recording is still available to retry.');const result=await res.json() as any;if(typeof result.text!=='string'||!result.text.trim())throw new HttpError(422,'No clear speech was detected. Please try again or type your review.');if(result.text.length>8000)throw new HttpError(502,'This transcript is too long. Your recording is still available to save or retry.');return json({text:result.text});}

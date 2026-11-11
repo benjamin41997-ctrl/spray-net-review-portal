@@ -11,6 +11,8 @@ import {isAppleMobile} from '@/lib/photo-save';
 import ReviewHandoff from './ReviewHandoff';
 import PhotoHandoff from './PhotoHandoff';
 import ReviewPreparation,{type PreparationPhase} from './ReviewPreparation';
+import {emptyDraft,parseReviewDraft,type ReviewDraft} from '@/lib/review-draft';
+import {useDraftSync} from './useDraftSync';
 
 type CustomerJob={id:string;title:string;source:string;demo:boolean;hasSticker?:boolean;links:Record<string,string>;photos:{id:string;kind:string;label:string}[]};
 type Stage='welcome'|'compose'|'check'|'photos'|'share'|'thanks';
@@ -20,7 +22,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
  const [mode,setMode]=useState<'type'|'voice'>('type');const [autoFormat,setAutoFormat]=useState(true);const [photoChoiceMade,setPhotoChoiceMade]=useState(false);
  const [text,setText]=useState('');const [original,setOriginal]=useState('');const [aiEdited,setAiEdited]=useState(false);
  const [selected,setSelected]=useState<string[]>(job.photos.map(p=>p.id));const [downloaded,setDownloaded]=useState<string[]>([]);const [approved,setApproved]=useState(false);
- const [restored,setRestored]=useState(false);const [storageIssue,setStorageIssue]=useState(false);
+ const [restored,setRestored]=useState(false);const [storageIssue,setStorageIssue]=useState(false);const hadLocalDraft=useRef(false);
  const [recording,setRecording]=useState(false);const [preparation,setPreparation]=useState<PreparationPhase|null>(null);const processing=preparation!==null;
  const [seconds,setSeconds]=useState(0);const [audio,setAudio]=useState<Blob|null>(null);const [audioURL,setAudioURL]=useState('');
  const [editingError,setEditingError]=useState('');const [showReview,setShowReview]=useState(false);
@@ -30,7 +32,14 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
  const recordingBase=useRef('');const liveDraft=useRef({text,autoFormat});liveDraft.current={text,autoFormat};
  const recordingTimer=useRef<ReturnType<typeof setInterval>|null>(null);const limitTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
  const textarea=useRef<HTMLTextAreaElement>(null);const heading=useRef<HTMLHeadingElement>(null);
- const key=`spraynet-review:v1:${staticDemo?'public-demo':token}`;const base=`customer/${token}`;
+ const key=`spraynet-review:v1:${staticDemo?'public-demo':preview&&!jobPreview?'preview-'+token:token}`;const base=`customer/${token}`;
+ const syncPath=!preview&&!job.demo?`${base}/draft`:null;
+ function applySyncedDraft(draft:ReviewDraft){
+  const followUp=draft.aiEdited&&isEditorFollowUp(draft.text);
+  update(followUp?draft.original:draft.text);setOriginal(draft.original);setAiEdited(draft.aiEdited&&!followUp);setNeedsDetail(draft.needsDetail||followUp);
+  setMode('type');setHandoffs({});setStage(draft.text?'check':'welcome');
+ }
+ const sync=useDraftSync(syncPath,key,restored,hadLocalDraft.current,parseReviewDraft({text,original,aiEdited,needsDetail})||emptyDraft,applySyncedDraft);
  const processingBase=jobPreview||preview&&!staticDemo?`admin/jobs/${job.id}`:base;
  const photoURL=(id:string,download=false)=>staticDemo?assetURL(`sample/${id}.webp`):remotePhotoURL(jobPreview?`admin/photos/${id}`:`${base}/photo/${id}`,{preview,download});
  function update(v:string){setText(v);setApproved(false);setEditingError('');}
@@ -42,6 +51,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
  }
  useEffect(()=>{
   try{const v=JSON.parse(localStorage.getItem(key)||'null');if(v&&Date.now()-v.savedAt<30*86400000){
+   hadLocalDraft.current=true;
    const draft=typeof v.text==='string'?v.text.slice(0,8000):'';
    const oldFollowUp=v.aiEdited===true&&isEditorFollowUp(draft);const blocked=v.needsDetail===true||oldFollowUp;
    setNeedsDetail(blocked);setText(oldFollowUp?(typeof v.original==='string'?v.original.slice(0,8000):''):draft);setOriginal(typeof v.original==='string'?v.original.slice(0,8000):'');setAiEdited(v.aiEdited===true&&!blocked);
@@ -104,7 +114,7 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
   }catch(e){setEditingError((e as Error).message);setAiEdited(false);}finally{setPreparation(null);setStage('check');}
  }
  function back(){if(stage==='compose')setStage('welcome');else if(stage==='check')setStage('compose');else if(stage==='photos')setStage('check');else if(stage==='share')setStage(approved&&job.photos.length?'photos':text?'check':'welcome');else if(stage==='thanks')setStage('share');}
- function clear(){update('');setOriginal('');setAiEdited(false);setNeedsDetail(false);setHandoffs({});setSelected(job.photos.map(p=>p.id));setDownloaded([]);setPhotoChoiceMade(false);setAutoFormat(true);setAudio(null);setStage('welcome');toast('Draft cleared on this device.');}
+ function clear(){if(syncPath&&!window.confirm('Clear this draft from the project link and this device?'))return;update('');setOriginal('');setAiEdited(false);setNeedsDetail(false);setHandoffs({});setSelected(job.photos.map(p=>p.id));setDownloaded([]);setPhotoChoiceMade(false);setAutoFormat(true);setAudio(null);setStage('welcome');if(!syncPath)toast('Draft cleared on this device.');}
  const destinations=orderedPlatforms(job.source,job.links);
  const nextDestination=destinations.find(p=>!handoffs[p]);
  function opened(platform:string){
@@ -127,8 +137,8 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
   <div className="intro"><h1 ref={heading} tabIndex={-1}>{processing?(preparation==='microphone'?'Connecting your microphone…':'Preparing your review…'):titles[stage]}</h1>{stage==='welcome'&&<p>A few simple steps to share your experience.</p>}</div>
   {preparation&&<ReviewPreparation phase={preparation}/>}
   {stage==='welcome'&&<section className="panel stack entry-choices" aria-label="Get started">
-   <button className="full" disabled={!restored} onClick={()=>{setMode('type');setStage('compose');}}><PenLine/>Type my review<ArrowRight/></button>
-   <button className="secondary full" disabled={!restored} onClick={()=>{setMode('voice');setStage('compose');}}><Mic/>Speak my review<ArrowRight/></button>
+   <button className="full" disabled={!restored||sync.loading} onClick={()=>{setMode('type');setStage('compose');}}><PenLine/>Type my review<ArrowRight/></button>
+   <button className="secondary full" disabled={!restored||sync.loading} onClick={()=>{setMode('voice');setStage('compose');}}><Mic/>Speak my review<ArrowRight/></button>
    <small>{capabilities.cleanup?'We’ll help tidy your wording. You approve every word.':'AI formatting isn’t connected yet. You can type and try the photo flow; your wording will stay unchanged.'}</small>
   </section>}
   {stage==='compose'&&!processing&&<section className="panel stack">
@@ -175,7 +185,12 @@ export default function Customer({token,initial:job,capabilities,preview,admin,j
    <div className="share-extras">{selected.length>0&&<button className="quiet" onClick={()=>setStage('photos')}>Save photos again</button>}{reviewDetails}</div>
    <small>You’re all set. You can close this page.</small>
   </section>}
-  {text&&storageIssue&&<div className="draft-notice"><small>Your browser could not save this draft. Copy it before leaving.</small></div>}
+  {sync.loading&&<div className="draft-notice" role="status"><small>Checking for a saved draft…</small></div>}
+  {sync.saving&&<div className="draft-notice" role="status"><small>Saving draft…</small></div>}
+  {sync.failed&&<div className="draft-notice" role="status"><small>Couldn’t sync this draft. <button className="quiet" onClick={sync.retry}>Retry sync</button></small></div>}
+  {sync.conflict&&<div className="notice stack" role="status"><small>Another device has a different draft. Choose which wording to keep.</small><button className="secondary" onClick={sync.useOnline}>Use draft from other device</button><button className="quiet" onClick={sync.useLocal}>Keep this device’s draft</button></div>}
+  {syncPath&&stage==='compose'&&<div className="draft-notice"><small>Your draft saves automatically for anyone with this project link.</small></div>}
+  {text&&storageIssue&&<div className="draft-notice"><small>Your browser could not save a local copy. Copy your draft before leaving if sync is unavailable.</small></div>}
   <footer className="footer">{text&&stage!=='thanks'&&<button className="quiet" disabled={recording||processing} onClick={clear}>Clear my draft</button>}</footer>
   <Toaster richColors/>
  </main>;

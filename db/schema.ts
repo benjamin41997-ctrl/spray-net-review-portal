@@ -26,3 +26,7 @@ export const events = sqliteTable('events', {
 }, t => [index('idx_events_job_type').on(t.jobId, t.type)]);
 export const counters = sqliteTable('counters', { name: text('name').primaryKey(), value: integer('value').notNull() });
 export const limits = sqliteTable('limits', { key: text('key').primaryKey(), count: integer('count').notNull() });
+export const reviewDrafts = sqliteTable('review_drafts', {
+ jobId: text('job_id').primaryKey().references(()=>jobs.id,{onDelete:'cascade'}),
+ version: text('version').notNull(), content: text('content').notNull(), updatedAt: integer('updated_at').notNull(),
+});
