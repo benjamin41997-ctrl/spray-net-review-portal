@@ -71,3 +71,5 @@ button.review-source-toggle{width:48px;height:28px;min-height:28px;padding:2px;j
 @keyframes preparation-spin{to{transform:rotate(360deg)}}
 @keyframes preparation-slide{from{transform:translateX(0)}to{transform:translateX(163%)}}
 @media(prefers-reduced-motion:reduce){.preparation-track span{transform:translateX(82%)}.preparation-icon svg,.preparation-track span{animation:none}}
+
+[data-slot="dialog-content"].qr-preview-dialog{grid-template-columns:minmax(0,1fr);max-height:calc(100dvh - 2rem);overflow:auto;justify-items:stretch;text-align:center;gap:.7rem}.qr-preview-dialog [data-slot="dialog-header"]{text-align:center}.qr-preview-dialog .qr-scan-image{display:block;width:min(320px,calc(100vw - 5rem),44dvh);max-width:100%;aspect-ratio:1;height:auto;margin:auto;image-rendering:pixelated;background:white}.qr-preview-label{font-size:1.15rem}.qr-preview-dialog select{display:block;width:100%;min-height:44px;border:1px solid var(--border);border-radius:8px;background:white;padding:.5rem}.qr-item .secondary{margin-top:.35rem}
